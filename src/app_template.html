@@ -32,6 +32,15 @@ aside { position: sticky; top: 8px; align-self: start; display: flex; flex-direc
 @media (max-width: 960px) { aside { position: static; max-height: none; } }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); }
 .card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.card-head h2 { margin: 0; }
+.help-toggle { font-size: 12.5px; padding: 3px 9px; border-radius: 12px; }
+.card.show-help .help-toggle { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.lbl-icon { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.help-btn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 5px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 11px; line-height: 1; vertical-align: -2px; cursor: pointer; }
+.help-btn[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.help { display: none; font-size: 12.5px; line-height: 1.35; color: var(--muted); margin: 3px 0 4px; padding-left: 19px; }
+.card.show-help .help, .help.open { display: block; }
 .card h3 { margin: 14px 0 6px; font-size: 14px; font-weight: 600; color: var(--muted); }
 label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 3px; }
 input[type=number], input[type=text], select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface2); color: var(--text); font: inherit; font-size: 14px; }
@@ -94,7 +103,7 @@ footer { padding: 6px 28px 24px; color: var(--muted); font-size: 12.5px; max-wid
     <div id="dataInfo" class="status"></div>
   </div>
   <div class="card">
-    <h2>Априорные условия</h2>
+    <div class="card-head"><h2>Априорные условия</h2><button type="button" class="help-toggle" data-card-help aria-pressed="false">Подсказки</button></div>
     <label for="matSel">Материал плёнки (справочник, Тауц–Лоренц + УФ-полюс)</label>
     <select id="matSel"></select>
     <details><summary>Параметры дисперсии (можно править)</summary>
@@ -125,7 +134,7 @@ footer { padding: 6px 28px 24px; color: var(--muted); font-size: 12.5px; max-wid
     <p class="note">Если в файле нет столбцов σ, берётся σΨ = это значение, σΔ = 2σΨ. Полоса и неопределённость угла нужны только генератору обучающих остатков.</p>
   </div>
   <div class="card">
-    <h2>Симулятор измерения</h2>
+    <div class="card-head"><h2>Симулятор измерения</h2><button type="button" class="help-toggle" data-card-help aria-pressed="false">Подсказки</button></div>
     <p class="note">Истинные параметры образца и прибора для синтеза спектра. Материал, подложка и номинальный угол берутся из блока выше; сгенерированный спектр становится текущим, истина скрыта до шага 4.</p>
     <div class="row">
       <div><label for="simD">Истинная толщина, нм</label><input type="number" id="simD" step="0.1" value="1017.3"></div>
@@ -574,6 +583,87 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   // при выборе материала/номинала подставлять истину симулятора рядом с номиналом
   $('dNom').addEventListener('change', () => { if (!$('simD').dataset.touched) $('simD').value = (+$('dNom').value * 1.017).toFixed(1); });
   $('simD').addEventListener('input', () => { $('simD').dataset.touched = '1'; });
+
+  // ---------------------------------------------------------------- иконки и описания полей (блоки «Априорные условия» и «Симулятор измерения»)
+  const ICONS = {
+    material: 'M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z M12 12l8-4.5 M12 12v9 M12 12L4 7.5',
+    dispersion: 'M3 17c3 0 4-10 8-10s4 6 10 4',
+    edge: 'M3 18h7l3-11h8',
+    substrate: 'M4 5h16v5H4z M4 14h16v5H4z',
+    angle: 'M4 19L20 7 M4 19h16 M11 19a7 7 0 0 0-2.8-5.6',
+    pm: 'M12 4v10 M7 9h10 M7 18h10',
+    thickness: 'M12 3v18 M9 6l3-3 3 3 M9 18l3 3 3-3 M5 3h14 M5 21h14',
+    percent: 'M5 19L19 5 M7 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4 M17 15a2 2 0 1 0 0 4 2 2 0 0 0 0-4',
+    bandwidth: 'M3 19c5 0 5-14 9-14s4 14 9 14 M8 12h8',
+    noise: 'M2 12l3-6 3 12 3-9 3 7 3-10 3 8 2-4',
+    seed: 'M5 5h14v14H5z M9 9h.01 M15 15h.01 M15 9h.01 M9 15h.01',
+    gradient: 'M4 19h16L4 5z',
+    roughness: 'M2 14c2-4 3 4 5 0s3 4 5 0 3 4 5 0 3 4 5 0 M2 20h20',
+    wavelength: 'M2 12c2.5-8 5-8 7.5 0s5 8 7.5 0 5-8 5 0',
+    grid: 'M4 4v16 M9 4v16 M14 4v16 M19 4v16',
+    ratio: 'M5 12h14 M12 6h.01 M12 18h.01',
+    shift: 'M4 12h16 M14 6l6 6-6 6',
+    drift: 'M3 17l6-6 4 4 8-8 M15 7h6v6',
+  };
+  const FIELD_HELP = {
+    matSel: ['material', 'Материал плёнки из справочника: задаёт стартовую дисперсию (Тауц–Лоренц + УФ-полюс) для фита и базовые параметры истины в симуляторе. Материал должен быть прозрачен или слабо поглощать в диапазоне измерения.'],
+    mA: ['dispersion', 'Сила осциллятора Тауца–Лоренца, эВ: масштаб ε₂ и основной вклад в n. В фите свободна.'],
+    mE0: ['dispersion', 'Энергия пика осциллятора E₀, эВ (положение основной полосы поглощения в УФ). В фите фиксирована справочным значением.'],
+    mC: ['dispersion', 'Ширина осциллятора C, эВ. В фите фиксирована; должно быть C < 2E₀.'],
+    mEg: ['edge', 'Край поглощения по Тауцу E_g, эВ: ниже него ε₂ = 0, плёнка прозрачна. В фите свободна; должно быть E_g < E₀.'],
+    mAuv: ['dispersion', 'Сила УФ-полюса Зельмейера, эВ²: заменяет переходы выше измеряемого диапазона, добавляет к n без поглощения. В фите свободна, ≥ 0.'],
+    mEuv: ['dispersion', 'Энергия УФ-полюса E_uv, эВ (обычно 11–16 эВ). В фите фиксирована.'],
+    subSel: ['substrate', 'Подложка, полубесконечная (отражение от задней стороны не учитывается): её n(λ), k(λ) берутся из формул или таблицы и в фите не варьируются.'],
+    phi: ['angle', 'Номинальный угол падения, градусы: используется во всех фитах как точное значение. В симуляторе к нему добавляется «ошибка угла».'],
+    phiErr: ['pm', 'Заявленная неопределённость угла, градусы: полуширина случайного разброса угла при генерации обучающих остатков (в фите угол не варьируется). Ошибка угла имитирует градиент: ≈0.3 % на 0.1° при 60–65°.'],
+    dNom: ['thickness', 'Номинальная толщина плёнки, нм — центр априорного интервала, в котором перебирается порядок интерференционных полос и генерируется обучающая выборка.'],
+    dRange: ['percent', 'Разброс толщины, ±% от номинала: ширина априорного интервала. Слишком узкий — истинная толщина может оказаться снаружи; слишком широкий — больше примеров нужно для обучения.'],
+    bw: ['bandwidth', 'Паспортная спектральная полоса прибора, нм (FWHM): центр разброса ±0.3 нм при генерации обучающих остатков. В модели фита полоса не учитывается, поэтому её след остаётся в остатке.'],
+    sigDef: ['noise', 'Шум Ψ по умолчанию, градусы: применяется, если в файле нет столбцов σΨ, σΔ; тогда σΔ = 2·σΨ. Задаёт масштаб остатка «в единицах шума».'],
+    simD: ['thickness', 'Истинная толщина плёнки, нм. Если она вне априорного интервала (номинал ± разброс), опорный фит её не найдёт — симулятор предупредит.'],
+    simSeed: ['seed', 'Зерно генератора случайных чисел для шума и дрейфа: одно и то же зерно даёт один и тот же спектр, другое — новую реализацию.'],
+    simDelta: ['gradient', 'Линейный градиент показателя по глубине, %: n(z) = n·[1 + δ(z/d − ½)], δ > 0 — n растёт к поверхности, δ < 0 — падает; 0 — однородная плёнка. Допустимо до ±20 %.'],
+    simRough: ['roughness', 'Толщина слоя шероховатости поверхности, нм: слой Бруггемана 50 % плёнка / 50 % пустота (σ_rms ≈ 0.5–0.7 толщины); 0 — гладкая поверхность.'],
+    simDA: ['dispersion', 'Отклонение силы осциллятора A истинной плёнки от справочника, %: имитирует плёнку с иной плотностью, чем в справочнике.'],
+    simDAuv: ['dispersion', 'Отклонение силы УФ-полюса A_uv от справочника, %.'],
+    simDEg: ['edge', 'Сдвиг края поглощения E_g истинной плёнки относительно справочника, эВ.'],
+    simDE0: ['dispersion', 'Сдвиг энергии осциллятора E₀, эВ. В фите E₀ остаётся справочным — это один из источников остаточной невязки.'],
+    simDC: ['dispersion', 'Сдвиг ширины осциллятора C, эВ. В фите C остаётся справочным.'],
+    simL0: ['wavelength', 'Начало спектрального диапазона прибора, нм.'],
+    simL1: ['wavelength', 'Конец спектрального диапазона прибора, нм.'],
+    simDL: ['grid', 'Шаг сетки длин волн, нм (не мельче 0.25); всего от 20 до 3000 точек. Влияет на число точек в остатке и время обучения.'],
+    simSig: ['noise', 'Повторяемость Ψ на красном краю (λ ≥ 650 нм), градусы — базовый уровень шума прибора.'],
+    simSigBlue: ['noise', 'Рост шума Ψ к синему краю, градусы: добавка σ·[(650 − λ)/250]² при λ < 650 нм (при значении 0.02 шум при 400 нм равен базовому + 0.02).'],
+    simSigRatio: ['ratio', 'Отношение шума Δ к шуму Ψ; дополнительно σΔ делится на max(sin 2Ψ, 0.15) — шум Δ растёт при малых Ψ, как у реальных RCE-приборов.'],
+    simBw: ['bandwidth', 'Спектральная полоса истинного прибора, нм (FWHM): сглаживает полосы, особенно на синем краю. Полезно сравнить с паспортной полосой в блоке выше.'],
+    simDphi: ['angle', 'Ошибка угла падения, градусы: фактический угол = номинал + ошибка. Аналитик её не знает; в остатке она имитирует градиент.'],
+    simOff: ['shift', 'Систематический сдвиг шкалы длин волн, нм: спектр считается при λ + сдвиг, но приписывается номинальным λ.'],
+    simDrP: ['drift', 'Дрейф калибровки Ψ, градусы: постоянное смещение плюс случайный наклон по диапазону в пределах ±этого значения.'],
+    simDrD: ['drift', 'Дрейф калибровки Δ, градусы: смещение плюс случайный наклон по диапазону в пределах ±этого значения.'],
+  };
+  function decorateFields() {
+    for (const [id, [icon, text]] of Object.entries(FIELD_HELP)) {
+      const el = $(id); if (!el) continue;
+      let label = document.querySelector(`label[for="${id}"]`);
+      if (!label && el.previousElementSibling && el.previousElementSibling.tagName === 'LABEL') label = el.previousElementSibling;
+      if (!label) continue;
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('class', 'lbl-icon'); svg.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', ICONS[icon]); svg.appendChild(path);
+      label.insertBefore(svg, label.firstChild);
+      const help = document.createElement('div'); help.className = 'help'; help.id = 'help-' + id; help.textContent = text;
+      const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'help-btn'; btn.textContent = '?'; btn.title = text;
+      btn.setAttribute('aria-label', 'Описание поля'); btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-controls', help.id);
+      btn.addEventListener('click', () => { const open = help.classList.toggle('open'); btn.setAttribute('aria-expanded', String(open)); });
+      label.appendChild(btn);
+      el.title = text;
+      el.insertAdjacentElement('afterend', help);
+    }
+    document.querySelectorAll('[data-card-help]').forEach(b => b.addEventListener('click', () => {
+      const card = b.closest('.card'); const on = card.classList.toggle('show-help'); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? 'Скрыть подсказки' : 'Подсказки';
+    }));
+  }
+  decorateFields();
   // ---------------------------------------------------------------- кнопки
   $('btn1').addEventListener('click', step1);
   $('btn2').addEventListener('click', () => step2());

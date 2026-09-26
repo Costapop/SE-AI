@@ -52,6 +52,8 @@ tools/gen_examples.js    генерация examples.json (--check сверяе�
 tools/write_xlsx.py      запись .xlsx из examples.json (openpyxl)
 test/run_examples.js     сквозной прогон всех образцов в Node: фит → обучение → диагноз → финальный фит
 test/ui_smoke.js         дымовой тест интерфейса в jsdom (встроенный образец, симуляция δ = 8 %, очистка панелей)
+test/verify_book.js      проверка физики ядра по книге Фурмана–Тихонравова (матричный метод, таблица 1.2, Риккати)
+docs/VERIFICATION.md     отчёт о проверке физики и математики по книге
 CHANGELOG.md             история версий
 RELEASE_NOTES_v1.0.0.md  текст релиза v1.0.0
 ```
@@ -63,6 +65,7 @@ RELEASE_NOTES_v1.0.0.md  текст релиза v1.0.0
 * Комплексный показатель $N = n - ik$, фазовый множитель $e^{-2i\beta}$, временной множитель $e^{+i\omega t}$ (Аззам–Башара; так же считают приборы).
 * $\rho = r_p / r_s = \tan\Psi\, e^{i\Delta}$, $\Delta \in [0°, 360°)$.
 * Угол падения $\varphi_0$ задаётся в градусах; $\cos\theta_j = \sqrt{1 - (\sin\varphi_0 / N_j)^2}$ с главной ветвью корня.
+* Знак $r_p$ — эллипсометрический (через **H**, Аззам–Башара): при нормальном падении $r_p = -r_s$, для прозрачной подложки $\Delta = 180°$ ниже угла Брюстера и $0°$ выше. В книге Фурмана–Тихонравова $r_p$ определён через тангенциальную компоненту **E** и имеет противоположный знак, поэтому $\Delta$ там отличается на 180°. Полная сверка ядра с книгой — в [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ### 3.2. Отражение от стопки слоёв
 
@@ -119,7 +122,7 @@ $$\varepsilon_1(E) = 1 + \varepsilon_1^{TL}(E) + \frac{A_{uv}}{E_{uv}^2 - E^2}.$
 ### 3.5. Дефекты
 
 * **Шероховатость поверхности** — верхний слой толщиной $d_r$ из эффективной среды Бруггемана 50 % плёнка / 50 % пустота: $\varepsilon_{\text{ema}}$ — положительный корень уравнения $\sum_i f_i \frac{\varepsilon_i - \varepsilon}{\varepsilon_i + 2\varepsilon} = 0$. Для типичной шероховатости $\sigma_{rms} \approx 0.5$–$0.7\,d_r$.
-* **Неоднородность (градиент)** — линейный профиль $n(z) = n(\lambda)\,[1 + \delta\,(z/d - \tfrac12)]$, $z = 0$ у подложки, $z = d$ у поверхности; $\delta > 0$ означает рост $n$ к поверхности. Профиль реализован лестницей из $M$ однородных подслоёв ($M = 40$ в синтезе и в окончательном фите). Средний по толщине показатель не меняется, поэтому $\delta$ и дисперсия плохо коррелируют.
+* **Неоднородность (градиент)** — линейный профиль $n(z) = n(\lambda)\,[1 + \delta\,(z/d - \tfrac12)]$, $z = 0$ у подложки, $z = d$ у поверхности; $\delta > 0$ означает рост $n$ к поверхности. В модели фита профиль реализован лестницей из $M$ однородных подслоёв по центрам ($M = 40$; при $|\delta| > 4$ % фит повторяется с $M = 80$ — ошибка лестницы не выше $0.35\sigma$). В симуляторе истинный спектр по умолчанию считается для непрерывного профиля интегрированием уравнения Риккати для локальной функции отражения (Фурман–Тихонравов, 1.1.19–1.1.20; RK4, шаг 0.5 нм) — см. `rhoGraded` и [docs/VERIFICATION.md](docs/VERIFICATION.md). Средний по толщине показатель не меняется, поэтому $\delta$ и дисперсия плохо коррелируют.
 
 ### 3.6. Прибор (синтез измерения)
 
@@ -232,7 +235,10 @@ $\chi^2/\nu = \|\mathbf r\|^2 / (2n - p)$, $p$ — число свободных
 | `buildLayers(lam, d, m, delta, dRough, M)` | стопка слоёв сверху вниз: EMA-слой (если `dRough > 0`) + плёнка (одна или `M` подслоёв градиента) |
 | `rhoStack(lam, layers, Nsub, phi)` | `r_p`, `r_s` для каждой λ |
 | `modelPsiDelta(lam, Nsub, phi, d, m, delta, dRough, M)` | Ψ, Δ модели без полосы |
-| `synthesize(lam, subKey, phiTrue, d, m, delta, dRough, opt, rng)` | «измерение»: `opt = {bw, lamOffset, driftPsi, driftDel, sigPsi, sigDel}` |
+| `rhoGraded(lam, Nsub, phi, d, m, delta, dRough, h)` | `r_p`, `r_s` для непрерывного линейного профиля (уравнение Риккати, RK4 с шагом `h` нм) с EMA-слоем сверху |
+| `synthesizeClean(lam, subKey, phiTrue, d, m, delta, dRough, opt)` | чистый спектр «измерения»: `opt = {bw, lamOffset, continuous, h}` |
+| `applyNoise(clean, lam, opt, rng)` | дрейф и шум: `opt = {driftPsi, driftDel, sigPsi, sigDel}` |
+| `synthesize(lam, subKey, phiTrue, d, m, delta, dRough, opt, rng)` | «измерение» = `applyNoise(synthesizeClean(...))` |
 | `makeRng(seed)` | детерминированный ГСЧ: `uniform()`, `normal()`, `range(a, b)`, `int(n)` |
 | `lmFit(residFn, x0, lo, hi, scale, maxIter)` | Левенберг–Марквардт с границами; возвращает `x, resid, chi2, cov, err` |
 | `referenceFit(data, cfg, prior)` | опорный фит однородной плёнки; `data = {lam, psi, del, sigPsi, sigDel}`, `cfg = {mat, subKey, Nsub, phi}`, `prior = {dMin, dMax}` |
@@ -305,6 +311,7 @@ $\chi^2/\nu = \|\mathbf r\|^2 / (2n - p)$, $p$ — число свободных
 | Зерно шума (`simSeed`) | 101 | зерно ГСЧ: то же зерно — тот же спектр |
 | Градиент δ, % (`simDelta`) | −0.8 | линейный градиент, $\delta > 0$ — $n$ растёт к поверхности; допустимо $|\delta| \le 20$ % |
 | EMA-слой шероховатости, нм (`simRough`) | 2.2 | толщина слоя Бруггемана 50/50; 0 — нет шероховатости |
+| непрерывный профиль градиента (`simCont`) | включён | истинный спектр при градиенте считается уравнением Риккати для непрерывного $n(z)$ (на 1–2 с дольше); выключен — лестница из 40 подслоёв, как в модели фита |
 | A, % (`simDA`); A_uv, % (`simDAuv`) | +2; −3 | относительные отклонения сил осцилляторов истины от справочника |
 | ΔE_g, ΔE₀, ΔC, эВ (`simDEg`, `simDE0`, `simDC`) | −0.03; +0.04; +0.05 | абсолютные отклонения; проверяется допустимость $E_g < E_0 - 0.1$, $C < 2E_0$ |
 | λ от, λ до, шаг, нм (`simL0`, `simL1`, `simDL`) | 400; 800; 2 | сетка прибора: 20–3000 точек, шаг ≥ 0.25 нм |
@@ -391,6 +398,7 @@ npm install                  # только jsdom для дымового тес
 npm run build                # index.html из шаблона, ядра и примеров
 npm test                     # сквозной прогон пяти образцов в Node (≈2–3 мин)
 npm run test:ui              # дымовой тест интерфейса в jsdom (≈3–4 мин)
+npm run verify:book          # сверка ядра с формулами и таблицей книги Фурмана–Тихонравова (≈10 с)
 npm run examples:check       # examples.json воспроизводится генератором без изменений
 npm run examples             # перегенерировать examples.json и .xlsx (нужен python3 + openpyxl)
 ```
@@ -407,3 +415,4 @@ npm run examples             # перегенерировать examples.json и
 6. D. E. Aspnes, A. A. Studna, Dielectric functions and optical parameters of Si, Ge, GaP, GaAs, GaSb, InP, InAs, and InSb from 1.5 to 6.0 eV, Phys. Rev. B **27**, 985 (1983).
 7. K. Popov, Uniqueness of thin-film recovery from spectroscopic ellipsometry, Phys. Scr. **101**, 295206 (2026).
 8. К. Попов, AI-assisted model discovery in spectroscopic ellipsometry, рукопись (2026).
+9. Sh. A. Furman, A. V. Tikhonravov, *Basics of Optics of Multilayer Systems*, Editions Frontières, Gif-sur-Yvette (1992) — уравнения поля в слоистой среде, формулы Френеля, матричный и рекуррентный методы, уравнение Риккати для локальной функции отражения.

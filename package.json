@@ -8,7 +8,8 @@
     "examples": "node tools/gen_examples.js && python3 tools/write_xlsx.py",
     "examples:check": "node tools/gen_examples.js --check",
     "test": "node test/run_examples.js 300",
-    "test:ui": "node test/ui_smoke.js"
+    "test:ui": "node test/ui_smoke.js",
+    "verify:book": "node test/verify_book.js"
   },
   "devDependencies": {
     "jsdom": "^24.0.0"

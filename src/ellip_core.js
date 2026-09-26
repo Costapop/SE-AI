@@ -150,22 +150,70 @@
     }
     return { N, C, S };
   }
+  /** Непрерывный линейный профиль n(z) = n·[1 + δ(z/d − ½)]: уравнение Риккати для локальной функции отражения
+   *  (Furman & Tikhonravov, 1.1.19, 1.1.20), RK4 с шагом h (нм); EMA-слой сверху добавляется по Эйри.
+   *  Возвращает [RP, RS] в конвенции ядра (r_p как в эллипсометрии, т.е. −r_p книги). */
+  function rhoGraded(lam, Nsub, phi, d, m, delta, dRough, h) {
+    h = h || 1.0;
+    const s0 = Math.sin(phi * PI / 180), s02 = s0 * s0, c0 = [Math.cos(phi * PI / 180), 0], N0 = [1, 0];
+    const Nf = filmN(lam, m);
+    const RP = new Array(lam.length), RS = new Array(lam.length);
+    const nSteps = Math.max(4, Math.ceil(d / h)), dz = d / nSteps;
+    for (let i = 0; i < lam.length; i++) {
+      const k = 2 * PI / lam[i], Nb = Nsub[i], cb = cosT(Nb, s02), Nc = Nf[i];
+      const epsAt = (z) => { const sc = 1 + delta * (z / d - 0.5); const N = [Nc[0] * sc, Nc[1] * sc]; return cmul(N, N); };
+      const out = {};
+      for (const pol of ['s', 'p']) {
+        const qa = pol === 's' ? c0[0] : 1 / c0[0];                             // внешняя среда — воздух
+        const qs = pol === 's' ? cmul(Nb, cb) : cdiv(Nb, cb);
+        const pref = [0, k / (2 * qa)];
+        const f = (z, r) => {
+          const eps = epsAt(z), om = csub([1, 0], r), op = cadd([1, 0], r), om2 = cmul(om, om), op2 = cmul(op, op);
+          let term;
+          if (pol === 's') term = csub([qa * qa * om2[0], qa * qa * om2[1]], cmul(csub(eps, [s02, 0]), op2));
+          else { const g = cmul(csub([1, 0], cdiv([s02, 0], eps)), om2); term = csub([qa * qa * g[0], qa * qa * g[1]], cmul(eps, op2)); }
+          return cmul(pref, term);
+        };
+        let r = cdiv(csub([qa, 0], qs), cadd([qa, 0], qs));                    // голая подложка (1.2.17)
+        for (let j = 0; j < nSteps; j++) {
+          const z = j * dz;
+          const k1 = f(z, r), k2 = f(z + dz / 2, cadd(r, [k1[0] * dz / 2, k1[1] * dz / 2])), k3 = f(z + dz / 2, cadd(r, [k2[0] * dz / 2, k2[1] * dz / 2])), k4 = f(z + dz, cadd(r, [k3[0] * dz, k3[1] * dz]));
+          r = [r[0] + dz / 6 * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]), r[1] + dz / 6 * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1])];
+        }
+        if (dRough > 0) {                                                         // EMA-слой поверх: r относительно среды ЭС, затем шаг Эйри
+          const sc = 1 + delta * 0.5, Ntop = [Nc[0] * sc, Nc[1] * sc];
+          const e = bruggeman(cmul(Ntop, Ntop), [1, 0], 0.5); let Ne = csqrt(e); Ne = [Math.abs(Ne[0]), -Math.abs(Ne[1])];
+          const ce = cosT(Ne, s02), qe = pol === 's' ? cmul(Ne, ce) : cdiv(Ne, ce);
+          const w = cmul([qa, 0], cdiv(csub([1, 0], r), cadd([1, 0], r)));       // w = v/u на верхней границе плёнки
+          const re = cdiv(csub(qe, w), cadd(qe, w));                              // отражение плёнки, видимое из среды ЭС
+          const rae = cdiv(csub([qa, 0], qe), cadd([qa, 0], qe));                // Френель воздух → ЭС (конвенция книги)
+          const bt = cmul([2 * PI * dRough / lam[i], 0], cmul(Ne, ce)); const X = cexp([2 * bt[1], -2 * bt[0]]);
+          r = cdiv(cadd(rae, cmul(re, X)), cadd([1, 0], cmul(cmul(rae, re), X)));
+        }
+        out[pol] = r;
+      }
+      RS[i] = out.s; RP[i] = [-out.p[0], -out.p[1]];                             // знак p: конвенция эллипсометрии
+    }
+    return [RP, RS];
+  }
   /** Ψ, Δ модели на сетке lam (без полосы). */
   function modelPsiDelta(lam, Nsub, phi, d, m, delta, dRough, M) {
     const [RP, RS] = rhoStack(lam, buildLayers(lam, d, m, delta || 0, dRough || 0, M || 20), Nsub, phi);
     return psiDeltaFromR(RP, RS);
   }
-  /** Синтез «измерения» с полосой (свёртка N, C, S на мелкой сетке), сдвигом шкалы, дрейфом и шумом. */
-  function synthesize(lam, subKey, phiTrue, d, m, delta, dRough, opt, rng) {
-    const bw = opt.bw || 0, off = opt.lamOffset || 0, step = 0.5;
+  /** Чистый спектр «измерения»: полоса (свёртка N, C, S на мелкой сетке), сдвиг шкалы, фактический угол.
+   *  opt.continuous — непрерывный профиль градиента (Риккати, шаг opt.h, по умолчанию 0.5 нм) вместо лестницы из 40 подслоёв. */
+  function synthesizeClean(lam, subKey, phiTrue, d, m, delta, dRough, opt) {
+    opt = opt || {};
+    const bw = opt.bw || 0, off = opt.lamOffset || 0, cont = !!(opt.continuous && delta), h = opt.h || 0.5, step = cont ? 1.0 : 0.5;
+    const rps = (lf, Nsub) => cont ? rhoGraded(lf, Nsub, phiTrue, d, m, delta, dRough, h) : rhoStack(lf, buildLayers(lf, d, m, delta, dRough, 40), Nsub, phiTrue);
     let psi, del;
     if (bw > 0) {
       const lo = lam[0] - 4 * bw - 2, hi = lam[lam.length - 1] + 4 * bw + 2;
       const nf = Math.floor((hi - lo) / step) + 1; const lf = new Array(nf); for (let i = 0; i < nf; i++) lf[i] = lo + i * step + off;
-      const Nsub = substrateN(subKey, lf);
-      const [RP, RS] = rhoStack(lf, buildLayers(lf, d, m, delta, dRough, 40), Nsub, phiTrue);
+      const [RP, RS] = rps(lf, substrateN(subKey, lf));
       const { N, C, S } = ncsFromR(RP, RS);
-      const sg = bw / 2.3548, half = Math.ceil(3.5 * sg / step); const ker = []; let ks = 0;
+      const sg = bw / 2.3548, half = Math.max(1, Math.ceil(3.5 * sg / step)); const ker = []; let ks = 0;
       for (let j = -half; j <= half; j++) { const w = Math.exp(-0.5 * (j * step / sg) ** 2); ker.push(w); ks += w; }
       const conv = (y) => { const out = new Float64Array(nf); for (let i = 0; i < nf; i++) { let s = 0; for (let j = -half; j <= half; j++) { const ii = Math.min(nf - 1, Math.max(0, i + j)); s += y[ii] * ker[j + half]; } out[i] = s / ks; } return out; };
       const Nc = conv(N), Cc = conv(C), Sc = conv(S);
@@ -178,16 +226,25 @@
       }
     } else {
       const la = lam.map(l => l + off);
-      const r = modelPsiDelta(la, substrateN(subKey, la), phiTrue, d, m, delta, dRough, 40); psi = r.psi; del = r.del;
+      const r = psiDeltaFromR(...rps(la, substrateN(subKey, la))); psi = r.psi; del = r.del;
     }
+    return { psi, del };
+  }
+  /** Дрейф калибровки и шум поверх чистого спектра (возвращает новые массивы). */
+  function applyNoise(clean, lam, opt, rng) {
     const n = lam.length, t = (l) => (l - (lam[0] + lam[n - 1]) / 2) / ((lam[n - 1] - lam[0]) / 2);
     const dp = opt.driftPsi || [0, 0], dd = opt.driftDel || [0, 0];
+    const psi = new Float64Array(n), del = new Float64Array(n);
     for (let i = 0; i < n; i++) {
-      psi[i] += dp[0] + dp[1] * t(lam[i]) + (opt.sigPsi ? opt.sigPsi[i] * rng.normal() : 0);
-      let v = del[i] + dd[0] + dd[1] * t(lam[i]) + (opt.sigDel ? opt.sigDel[i] * rng.normal() : 0);
+      psi[i] = clean.psi[i] + dp[0] + dp[1] * t(lam[i]) + (opt.sigPsi ? opt.sigPsi[i] * rng.normal() : 0);
+      let v = clean.del[i] + dd[0] + dd[1] * t(lam[i]) + (opt.sigDel ? opt.sigDel[i] * rng.normal() : 0);
       v = v % 360; if (v < 0) v += 360; del[i] = v;
     }
     return { psi, del };
+  }
+  /** Синтез «измерения» = чистый спектр + дрейф + шум. */
+  function synthesize(lam, subKey, phiTrue, d, m, delta, dRough, opt, rng) {
+    return applyNoise(synthesizeClean(lam, subKey, phiTrue, d, m, delta, dRough, opt), lam, opt || {}, rng);
   }
 
   // ---------------------------------------------------------------- генератор случайных чисел (детерминированный)
@@ -308,7 +365,9 @@
     const b = free.map(k => boundsFor(k, cfg, prior));
     const margin = 0.3 * (prior.dMax - prior.dMin); b[0] = [prior.dMin - margin, prior.dMax + margin, b[0][2]];
     const x0 = free.map(k => Math.min(b[free.indexOf(k)][1], Math.max(b[free.indexOf(k)][0], p0[k])));
-    const res = lmFit(makeResidFn(data, cfg, free, fixed, 40), x0, b.map(v => v[0]), b.map(v => v[1]), b.map(v => v[2]), 80);
+    let res = lmFit(makeResidFn(data, cfg, free, fixed, 40), x0, b.map(v => v[0]), b.map(v => v[1]), b.map(v => v[2]), 80);
+    const iD = free.indexOf('delta');
+    if (iD >= 0 && Math.abs(res.x[iD]) > 0.04) res = lmFit(makeResidFn(data, cfg, free, fixed, 80), res.x, b.map(v => v[0]), b.map(v => v[1]), b.map(v => v[2]), 40);   // |δ| > 4 %: 80 подслоёв (ошибка лестницы ≤ 0.4σ)
     const P = { dRough: 0, delta: 0 }; free.forEach((k, i) => P[k] = res.x[i]);
     const E = {}; free.forEach((k, i) => E[k] = res.err[i]);
     return { P, E, resid: res.resid, chi2: res.chi2, free };
@@ -398,6 +457,6 @@
     return { x: featureVector(dd, cfg, fit.resid), y: cls, delta, dRough, d, dFit: fit.P.d, chi2: fit.chi2 };
   }
 
-  const api = { HC, MATERIALS, SUBSTRATES, CLASSES, filmN, filmNK, substrateN, buildLayers, rhoStack, psiDeltaFromR, modelPsiDelta, synthesize, makeRng, lmFit, referenceFit, finalFit, anchors, channels, featureVector, trainSoftmax, ridge, trainingExample, wrap, interp, tlEps };
+  const api = { HC, MATERIALS, SUBSTRATES, CLASSES, filmN, filmNK, substrateN, buildLayers, rhoStack, psiDeltaFromR, modelPsiDelta, rhoGraded, synthesizeClean, applyNoise, synthesize, makeRng, lmFit, referenceFit, finalFit, anchors, channels, featureVector, trainSoftmax, ridge, trainingExample, wrap, interp, tlEps };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.EllipCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);

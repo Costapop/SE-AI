@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Дефекты плёнки по остатку эллипсометрического фита</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #F3F5F8; --surface: #FFFFFF; --surface2: #EAEFF4; --text: #17212C; --muted: #5E6C7A; --line: #D5DDE5;
+  --accent: #1E6E8E; --accent-ink: #FFFFFF; --psi: #2F6FD6; --del: #D24A4A; --warn: #C27A18; --ok: #2E8B57; --shadow: 0 1px 2px rgba(23,33,44,.08);
+  box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12171D; --surface: #1B222B; --surface2: #232C36; --text: #E5EAF0; --muted: #98A6B4; --line: #33404D;
+  --accent: #52B2D8; --accent-ink: #0F1418; --psi: #6C9BEA; --del: #EA7373; --warn: #E0A04A; --ok: #63C08A; --shadow: none; } }
+:root[data-theme="dark"] {
+  --bg: #12171D; --surface: #1B222B; --surface2: #232C36; --text: #E5EAF0; --muted: #98A6B4; --line: #33404D;
+  --accent: #52B2D8; --accent-ink: #0F1418; --psi: #6C9BEA; --del: #EA7373; --warn: #E0A04A; --ok: #63C08A; --shadow: none; }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 'Segoe UI', Roboto, Arial, sans-serif; font-size: 15px; line-height: 1.45; font-feature-settings: 'tnum' 1; }
+header { padding: 22px 28px 12px; }
+header h1 { margin: 0 0 4px; font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--muted); max-width: 78ch; }
+.wrap { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 22px; padding: 8px 28px 40px; }
+@media (max-width: 960px) { .wrap { grid-template-columns: 1fr; padding: 8px 14px 40px; } header { padding: 18px 14px 8px; } }
+aside { position: sticky; top: 8px; align-self: start; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 16px); overflow: auto; }
+@media (max-width: 960px) { aside { position: static; max-height: none; } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); }
+.card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+.card h3 { margin: 14px 0 6px; font-size: 14px; font-weight: 600; color: var(--muted); }
+label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 3px; }
+input[type=number], input[type=text], select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface2); color: var(--text); font: inherit; font-size: 14px; }
+input[type=file] { width: 100%; font-size: 13px; color: var(--muted); }
+input[type=range] { width: 100%; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+button { font: inherit; font-size: 14px; font-weight: 500; padding: 8px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface2); color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btns { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.steps { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow); }
+.step > h2 { margin: 0 0 6px; font-size: 17px; font-weight: 600; display: flex; align-items: baseline; gap: 10px; }
+.step > h2 .num { color: var(--muted); font-weight: 500; }
+.step .lead { margin: 0 0 10px; color: var(--muted); font-size: 14px; max-width: 90ch; }
+.chart { position: relative; height: 260px; margin: 8px 0; }
+.chart.tall { height: 300px; }
+.chart.short { height: 220px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 6px 0; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 13px; background: var(--surface2); color: var(--text); margin-right: 6px; }
+.tag.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.tag.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.tag.bad { background: color-mix(in srgb, var(--del) 18%, transparent); color: var(--del); }
+.note { font-size: 13.5px; color: var(--muted); }
+.verdict { font-size: 16px; font-weight: 600; margin: 8px 0 4px; }
+.bar { height: 10px; background: var(--surface2); border-radius: 5px; overflow: hidden; margin: 8px 0; }
+.bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.probs { display: grid; grid-template-columns: max-content 1fr max-content; gap: 6px 10px; align-items: center; margin: 8px 0; }
+.probs .pb { height: 12px; background: var(--surface2); border-radius: 6px; overflow: hidden; }
+.probs .pb > div { height: 100%; background: var(--accent); }
+.probs .best { font-weight: 600; }
+.status { min-height: 20px; font-size: 13.5px; color: var(--muted); margin-top: 6px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-top: 8px; }
+.checks label { display: inline-flex; align-items: center; gap: 6px; margin: 4px 14px 4px 0; color: var(--text); font-size: 14px; }
+.hidden { display: none; }
+.empty { color: var(--muted); font-size: 14px; padding: 10px 0; }
+footer { padding: 6px 28px 24px; color: var(--muted); font-size: 12.5px; max-width: 110ch; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Дефекты плёнки по остатку эллипсометрического фита</h1>
+  <p>Спектр Ψ, Δ на отрезке длин волн, материал из справочника, подложка, угол и толщина — на входе. Опорный фит однородной плёнки, ИИ-модель, обученная на смоделированных остатках, выбор наиболее вероятного набора дефектов и окончательный фит — на выходе. Дефекты: неоднородность по глубине и шероховатость поверхности; задней стороны подложки нет. Симулятор позволяет задать любую комбинацию дефектов и параметров прибора, синтезировать «измерение» и проверить на нём всю цепочку.</p>
+</header>
+<div class="wrap">
+<aside>
+  <div class="card">
+    <h2>Спектр</h2>
+    <label for="exSel">Встроенный тестовый образец</label>
+    <select id="exSel"></select>
+    <label for="fileIn">Или файл .xlsx / .csv (столбцы: λ нм, Ψ, Δ, при наличии σΨ, σΔ)</label>
+    <input type="file" id="fileIn" accept=".xlsx,.xls,.csv,.txt">
+    <div id="dataInfo" class="status"></div>
+  </div>
+  <div class="card">
+    <h2>Априорные условия</h2>
+    <label for="matSel">Материал плёнки (справочник, Тауц–Лоренц + УФ-полюс)</label>
+    <select id="matSel"></select>
+    <details><summary>Параметры дисперсии (можно править)</summary>
+      <div class="row3">
+        <div><label>A, эВ</label><input type="number" id="mA" step="0.01"></div>
+        <div><label>E₀, эВ</label><input type="number" id="mE0" step="0.01"></div>
+        <div><label>C, эВ</label><input type="number" id="mC" step="0.01"></div>
+        <div><label>E_g, эВ</label><input type="number" id="mEg" step="0.01"></div>
+        <div><label>A_uv, эВ²</label><input type="number" id="mAuv" step="0.01"></div>
+        <div><label>E_uv, эВ</label><input type="number" id="mEuv" step="0.1"></div>
+      </div>
+      <p class="note">В фите свободны A, A_uv, E_g и толщина; E₀, C, E_uv фиксированы. Значения справочника — типовые для аморфных плёнок.</p>
+    </details>
+    <label for="subSel">Подложка (полубесконечная)</label>
+    <select id="subSel"></select>
+    <div class="row">
+      <div><label for="phi">Угол падения, град</label><input type="number" id="phi" step="0.01" value="65"></div>
+      <div><label for="phiErr">Его неопределённость, град</label><input type="number" id="phiErr" step="0.01" value="0.03"></div>
+    </div>
+    <div class="row">
+      <div><label for="dNom">Толщина (номинал), нм</label><input type="number" id="dNom" step="1" value="1000"></div>
+      <div><label for="dRange">Разброс толщины, ±%</label><input type="number" id="dRange" step="0.5" value="5"></div>
+    </div>
+    <div class="row">
+      <div><label for="bw">Полоса прибора, нм (FWHM)</label><input type="number" id="bw" step="0.1" value="1.0"></div>
+      <div><label for="sigDef">σΨ по умолчанию, град</label><input type="number" id="sigDef" step="0.005" value="0.02"></div>
+    </div>
+    <p class="note">Если в файле нет столбцов σ, берётся σΨ = это значение, σΔ = 2σΨ. Полоса и неопределённость угла нужны только генератору обучающих остатков.</p>
+  </div>
+  <div class="card">
+    <h2>Симулятор измерения</h2>
+    <p class="note">Истинные параметры образца и прибора для синтеза спектра. Материал, подложка и номинальный угол берутся из блока выше; сгенерированный спектр становится текущим, истина скрыта до шага 4.</p>
+    <div class="row">
+      <div><label for="simD">Истинная толщина, нм</label><input type="number" id="simD" step="0.1" value="1017.3"></div>
+      <div><label for="simSeed">Зерно шума</label><input type="number" id="simSeed" step="1" value="101"></div>
+    </div>
+    <div class="row">
+      <div><label for="simDelta">Градиент δ, % (n растёт к поверхности &gt; 0)</label><input type="number" id="simDelta" step="0.1" value="-0.8"></div>
+      <div><label for="simRough">EMA-слой шероховатости, нм</label><input type="number" id="simRough" step="0.1" value="2.2"></div>
+    </div>
+    <details><summary>Отклонение дисперсии от справочника</summary>
+      <div class="row3">
+        <div><label>A, %</label><input type="number" id="simDA" step="0.5" value="2"></div>
+        <div><label>A_uv, %</label><input type="number" id="simDAuv" step="0.5" value="-3"></div>
+        <div><label>ΔE_g, эВ</label><input type="number" id="simDEg" step="0.01" value="-0.03"></div>
+        <div><label>ΔE₀, эВ</label><input type="number" id="simDE0" step="0.01" value="0.04"></div>
+        <div><label>ΔC, эВ</label><input type="number" id="simDC" step="0.01" value="0.05"></div>
+      </div>
+    </details>
+    <details><summary>Прибор: диапазон, шум, полоса, угол, дрейф</summary>
+      <div class="row3">
+        <div><label>λ от, нм</label><input type="number" id="simL0" step="1" value="400"></div>
+        <div><label>λ до, нм</label><input type="number" id="simL1" step="1" value="800"></div>
+        <div><label>шаг, нм</label><input type="number" id="simDL" step="0.5" value="2"></div>
+      </div>
+      <div class="row3">
+        <div><label>σΨ (красный край), град</label><input type="number" id="simSig" step="0.005" value="0.015"></div>
+        <div><label>рост σΨ к синему, град</label><input type="number" id="simSigBlue" step="0.005" value="0.02"></div>
+        <div><label>σΔ / σΨ</label><input type="number" id="simSigRatio" step="0.1" value="2.2"></div>
+      </div>
+      <div class="row3">
+        <div><label>полоса, нм (FWHM)</label><input type="number" id="simBw" step="0.1" value="1.2"></div>
+        <div><label>ошибка угла, град</label><input type="number" id="simDphi" step="0.01" value="0.02"></div>
+        <div><label>сдвиг шкалы λ, нм</label><input type="number" id="simOff" step="0.01" value="0.05"></div>
+      </div>
+      <div class="row">
+        <div><label>дрейф Ψ (смещение), град</label><input type="number" id="simDrP" step="0.005" value="0.01"></div>
+        <div><label>дрейф Δ (смещение), град</label><input type="number" id="simDrD" step="0.01" value="0.03"></div>
+      </div>
+      <p class="note">σΨ(λ) = σ_красн + рост·((650 − λ)/250)² при λ &lt; 650 нм; σΔ = отношение·σΨ / max(sin 2Ψ, 0.15). Задней стороны подложки нет.</p>
+    </details>
+    <div class="btns">
+      <button class="primary" id="btnSim">Сгенерировать измерение</button>
+      <button id="btnCsv" disabled>Скопировать спектр как CSV</button>
+    </div>
+    <div id="simStatus" class="status"></div>
+  </div>
+  <div class="card">
+    <h2>ИИ-модель</h2>
+    <label for="nTrain">Обучающих примеров: <span id="nTrainVal">600</span></label>
+    <input type="range" id="nTrain" min="200" max="2000" step="100" value="600">
+    <div class="row">
+      <div><label for="seed">Зерно генератора</label><input type="number" id="seed" step="1" value="7"></div>
+      <div><label for="deltaMax">Макс. |δ| в обучении, %</label><input type="number" id="deltaMax" step="0.5" min="0.5" max="20" value="5"></div>
+    </div>
+    <div class="btns">
+      <button class="primary" id="btnAll">Выполнить все шаги</button>
+      <button id="btn1">1 · Опорный фит</button>
+      <button id="btn2" disabled>2 · Обучить ИИ на остатках</button>
+      <button id="btn3" disabled>3 · Диагноз</button>
+      <button id="btn4" disabled>4 · Окончательный фит</button>
+    </div>
+    <div id="globalStatus" class="status"></div>
+  </div>
+</aside>
+
+<main class="steps">
+  <section class="step" id="s0">
+    <h2><span class="num">0</span>Измеренный спектр</h2>
+    <p class="lead">Ψ и Δ в градусах; Δ в диапазоне 0–360°. После фитов на график ложится модель.</p>
+    <div class="chart tall"><canvas id="chSpec"></canvas></div>
+    <div id="specNote" class="note"></div>
+  </section>
+
+  <section class="step" id="s1">
+    <h2><span class="num">1</span>Опорный фит: однородная плёнка</h2>
+    <p class="lead">Толщина ищется грубым перебором в заданном разбросе, затем метод Левенберга–Марквардта по d, A, A_uv, E_g. Остаток (измерено − модель) в единицах σ — то, что модель не смогла объяснить.</p>
+    <div id="refOut" class="empty">Загрузите спектр и нажмите «Опорный фит».</div>
+    <div class="chart"><canvas id="chRes"></canvas></div>
+    <div id="chanOut" class="note"></div>
+  </section>
+
+  <section class="step" id="s2">
+    <h2><span class="num">2</span>Обучение ИИ-модели на смоделированных остатках</h2>
+    <p class="lead">Для тех же условий генерируются спектры с случайными дефектами шести классов (без дефектов; градиент δ&gt;0 или δ&lt;0; шероховатость; их сочетания) и с мешающими факторами: толщина в заданном разбросе, дисперсия ±5 %, ошибка угла, полоса, сдвиг шкалы λ, дрейф, шум по σ из файла. Каждый пример фитируется той же однородной моделью; на его остатке и учится логистическая регрессия.</p>
+    <div class="bar"><div id="trainBar"></div></div>
+    <div id="trainOut" class="empty">Сначала опорный фит.</div>
+  </section>
+
+  <section class="step" id="s3">
+    <h2><span class="num">3</span>Диагноз: вероятности наборов дефектов</h2>
+    <p class="lead">Остаток измеренного спектра подаётся в обученную модель. Ниже — вероятность каждого класса и оценка размеров дефектов регрессией. Модель для окончательного фита можно поправить вручную.</p>
+    <div id="diagOut" class="empty">Сначала обучение.</div>
+    <div class="checks" id="modelChoice" style="display:none">
+      <label><input type="checkbox" id="ckGrad"> градиент показателя по глубине</label>
+      <label><input type="checkbox" id="ckRough"> шероховатость поверхности (EMA-слой)</label>
+    </div>
+  </section>
+
+  <section class="step" id="s4">
+    <h2><span class="num">4</span>Окончательный фит и решение</h2>
+    <p class="lead">Фит в выбранной модели: однородная плёнка плюс слой Бруггемана (50 % плёнка / 50 % пустота) и/или линейный градиент показателя (лестница из 20 подслоёв). Параметр дефекта, не отличимый от нуля на 3σ, отбрасывается, и фит повторяется.</p>
+    <div id="finOut" class="empty">Сначала диагноз.</div>
+    <div class="grid2">
+      <div class="chart"><canvas id="chResFin"></canvas></div>
+      <div class="chart"><canvas id="chFinger"></canvas></div>
+    </div>
+    <div class="chart short"><canvas id="chN"></canvas></div>
+    <div id="truthOut"></div>
+    <div id="causeOut"></div>
+  </section>
+</main>
+</div>
+<footer>Физика: коэффициенты Френеля и формула Эйри для стопки слоёв, конвенция N = n − ik, Δ по Аззаму–Башаре; дисперсия Тауца–Лоренца (Jellison–Modine) с УФ-полюсом; шероховатость — эффективная среда Бруггемана; неоднородность — линейный профиль n(z) = n·[1 + δ(z/d − ½)], δ &gt; 0 означает рост n к поверхности. Подложки: BK7 (Schott), плавленый кварц (Malitson), кремний (табличные n, k). ИИ: мультиномиальная логистическая регрессия на остатке и якорных каналах, гребневая регрессия для размеров. Все вычисления идут в браузере.</footer>
+
+<script>
+/*__CORE__*/
+</script>
+<script>
+const EXAMPLES = /*__EXAMPLES__*/[];
+</script>
+<script>
+(function () {
+  'use strict';
+  const E = window.EllipCore;
+  const $ = (id) => document.getElementById(id);
+  const S = { data: null, example: null, cfg: null, prior: null, ref: null, train: null, probs: null, fin: null, charts: {} };
+  const fmt = (v, n) => (isFinite(v) ? Number(v).toFixed(n) : '—');
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  // ---------------------------------------------------------------- селекторы
+  const exSel = $('exSel'); exSel.innerHTML = '<option value="">— выберите —</option>' + EXAMPLES.map((e, i) => `<option value="${i}">${e.title}</option>`).join('');
+  const matSel = $('matSel'); matSel.innerHTML = Object.entries(E.MATERIALS).map(([k, m]) => `<option value="${k}">${m.name}</option>`).join('');
+  const subSel = $('subSel'); subSel.innerHTML = Object.entries(E.SUBSTRATES).map(([k, s]) => `<option value="${k}">${s.name}</option>`).join('');
+  function fillMat(key) { const m = E.MATERIALS[key]; $('mA').value = m.A; $('mE0').value = m.E0; $('mC').value = m.C; $('mEg').value = m.Eg; $('mAuv').value = m.Auv; $('mEuv').value = m.Euv; }
+  matSel.addEventListener('change', () => fillMat(matSel.value)); fillMat(matSel.value);
+  $('nTrain').addEventListener('input', () => $('nTrainVal').textContent = $('nTrain').value);
+
+  // ---------------------------------------------------------------- данные
+  function setData(d, example) {
+    S.data = d; S.example = example || null; S.ref = S.train = S.probs = S.fin = null;
+    $('dataInfo').textContent = `${d.lam.length} точек, ${fmt(d.lam[0], 0)}–${fmt(d.lam[d.lam.length - 1], 0)} нм` + (d.hasSigma ? ', σ из файла' : ', σ по умолчанию');
+    $('btn1').disabled = false; $('btn2').disabled = true; $('btn3').disabled = true; $('btn4').disabled = true;
+    ['refOut', 'trainOut', 'diagOut', 'finOut'].forEach(id => { $(id).className = 'empty'; });
+    $('refOut').textContent = 'Нажмите «Опорный фит».'; $('trainOut').textContent = 'Сначала опорный фит.'; $('diagOut').textContent = 'Сначала обучение.'; $('finOut').textContent = 'Сначала диагноз.';
+    $('modelChoice').style.display = 'none'; $('truthOut').innerHTML = ''; $('chanOut').textContent = ''; $('trainBar').style.width = '0%';
+    ['chRes', 'chResFin', 'chFinger', 'chN'].forEach(destroyChart);
+    drawSpectrum();
+    $('specNote').textContent = example ? `Образец «${example.title}». Истинные параметры скрыты до окончательного фита.` : 'Файл пользователя.';
+    $('btnCsv').disabled = false;
+  }
+  exSel.addEventListener('change', () => {
+    const e = EXAMPLES[+exSel.value]; if (!e) return;
+    matSel.value = e.mat; fillMat(e.mat); subSel.value = e.sub; $('phi').value = e.phi; $('dNom').value = e.dNom; $('dRange').value = e.dRange; $('bw').value = e.bw;
+    setData({ lam: e.lam.slice(), psi: e.psi.slice(), del: e.del.slice(), sigPsi: e.sigPsi.slice(), sigDel: e.sigDel.slice(), hasSigma: true }, e);
+  });
+  $('fileIn').addEventListener('change', async (ev) => {
+    const f = ev.target.files[0]; if (!f) return;
+    try {
+      let rows;
+      if (/\.(xlsx|xls)$/i.test(f.name)) { const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' }); const ws = wb.Sheets[wb.SheetNames[0]]; rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true }); }
+      else { const txt = await f.text(); const sep = /;/.test(txt) ? ';' : (/\t/.test(txt) ? '\t' : ','); rows = txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(l => l.split(sep).map(v => { let s = String(v).trim(); if (sep !== ',') s = s.replace(',', '.'); const n = Number(s); return isFinite(n) && s !== '' ? n : s; })); }
+      const parsed = parseRows(rows); exSel.value = ''; setData(parsed, null);
+    } catch (err) { $('dataInfo').textContent = 'Не удалось прочитать файл: ' + err.message; }
+  });
+  function parseRows(rows) {
+    let hi = rows.findIndex(r => r && r.filter(v => typeof v === 'string' && v.trim()).length >= 2);
+    let col = { lam: 0, psi: 1, del: 2, sp: 3, sd: 4 };
+    if (hi >= 0) {
+      const h = rows[hi].map(v => String(v).toLowerCase());
+      const find = (re, def) => { const i = h.findIndex(v => re.test(v)); return i >= 0 ? i : def; };
+      col = { lam: find(/λ|lam|wave|нм|nm/, 0), psi: find(/^(?!.*σ)(?!.*sig)(?!.*err).*(ψ|psi)/, 1), del: find(/^(?!.*σ)(?!.*sig)(?!.*err).*(δ|delta)/, 2), sp: find(/(σψ|sig.*psi|err.*psi|σ.*ψ)/, -1), sd: find(/(σδ|sig.*del|err.*del|σ.*δ)/, -1) };
+    }
+    const lam = [], psi = [], del = [], sp = [], sd = [];
+    for (const r of rows.slice(hi + 1)) { if (!r || !isFinite(+r[col.lam]) || !isFinite(+r[col.psi]) || !isFinite(+r[col.del])) continue; lam.push(+r[col.lam]); psi.push(+r[col.psi]); let dv = +r[col.del]; dv = ((dv % 360) + 360) % 360; del.push(dv); sp.push(col.sp >= 0 && isFinite(+r[col.sp]) ? +r[col.sp] : NaN); sd.push(col.sd >= 0 && isFinite(+r[col.sd]) ? +r[col.sd] : NaN); }
+    if (lam.length < 20) throw new Error('меньше 20 строк с числами λ, Ψ, Δ');
+    const idx = lam.map((_, i) => i).sort((a, b) => lam[a] - lam[b]);
+    const g = (a) => idx.map(i => a[i]);
+    const hasSigma = sp.every(isFinite) && sd.every(isFinite);
+    const s0 = +$('sigDef').value || 0.02;
+    return { lam: g(lam), psi: g(psi), del: g(del), sigPsi: hasSigma ? g(sp) : lam.map(() => s0), sigDel: hasSigma ? g(sd) : lam.map(() => 2 * s0), hasSigma };
+  }
+  window.__parseRows = parseRows;
+  function readCfg() {
+    const mat = { A: +$('mA').value, E0: +$('mE0').value, C: +$('mC').value, Eg: +$('mEg').value, Auv: +$('mAuv').value, Euv: +$('mEuv').value, name: E.MATERIALS[matSel.value].name };
+    const subKey = subSel.value, phi = +$('phi').value, dNom = +$('dNom').value, rng = +$('dRange').value / 100;
+    S.cfg = { mat, subKey, Nsub: E.substrateN(subKey, S.data.lam), phi, subDel: null };
+    S.prior = { dMin: dNom * (1 - rng), dMax: dNom * (1 + rng) };
+    S.nuis = { deltaMax: Math.min(0.20, Math.max(0.005, (+$('deltaMax').value || 5) / 100)), roughMax: 3.0, bw: +$('bw').value || 0, phiErr: +$('phiErr').value || 0 };
+  }
+
+  // ---------------------------------------------------------------- графики
+  function destroyChart(id) { if (S.charts[id]) { S.charts[id].destroy(); delete S.charts[id]; } }
+  function baseOpts(xTitle, yTitle, y2Title) {
+    const grid = css('--line'), tick = css('--muted');
+    const o = { responsive: true, maintainAspectRatio: false, animation: false, parsing: false, normalized: true, interaction: { mode: 'nearest', intersect: false },
+      plugins: { legend: { labels: { color: css('--text'), boxWidth: 14, font: { size: 12 } } }, tooltip: { enabled: true } },
+      scales: { x: { type: 'linear', title: { display: true, text: xTitle, color: tick }, ticks: { color: tick }, grid: { color: grid } }, y: { title: { display: true, text: yTitle, color: tick }, ticks: { color: tick }, grid: { color: grid } } } };
+    if (y2Title) o.scales.y2 = { position: 'right', title: { display: true, text: y2Title, color: tick }, ticks: { color: tick }, grid: { drawOnChartArea: false } };
+    return o;
+  }
+  const pts = (x, y) => Array.from(x, (v, i) => ({ x: v, y: y[i] }));
+  function drawSpectrum(model) {
+    destroyChart('chSpec'); const d = S.data;
+    const ds = [{ label: 'Ψ измерено', data: pts(d.lam, d.psi), borderColor: css('--psi'), borderWidth: 1.4, pointRadius: 0, yAxisID: 'y' },
+      { label: 'Δ измерено', data: pts(d.lam, d.del), borderColor: css('--del'), borderWidth: 1.4, pointRadius: 0, yAxisID: 'y2', showLine: false, pointRadius: 1.5 }];
+    if (model) { ds.push({ label: model.label + ': Ψ', data: pts(d.lam, model.psi), borderColor: css('--text'), borderWidth: 1, borderDash: [4, 3], pointRadius: 0, yAxisID: 'y' }); ds.push({ label: model.label + ': Δ', data: pts(d.lam, model.del), borderColor: css('--muted'), borderWidth: 1, borderDash: [4, 3], pointRadius: 0, yAxisID: 'y2', showLine: false, pointRadius: 1 }); }
+    S.charts.chSpec = new Chart($('chSpec'), { type: 'line', data: { datasets: ds }, options: baseOpts('Длина волны, нм', 'Ψ, град', 'Δ, град') });
+  }
+  function drawResidual(id, resid, title) {
+    destroyChart(id); const n = S.data.lam.length; const rp = Array.from(resid.slice(0, n)), rd = Array.from(resid.slice(n));
+    const o = baseOpts('Длина волны, нм', 'остаток, σ'); o.plugins.title = { display: true, text: title, color: css('--text'), font: { size: 13, weight: '500' } };
+    S.charts[id] = new Chart($(id), { type: 'line', data: { datasets: [{ label: 'Ψ-остаток', data: pts(S.data.lam, rp), borderColor: css('--psi'), borderWidth: 1.3, pointRadius: 0 }, { label: 'Δ-остаток', data: pts(S.data.lam, rd), borderColor: css('--del'), borderWidth: 1.3, pointRadius: 0 }] }, options: o });
+  }
+  function drawFinger(r0, r1) {
+    destroyChart('chFinger'); const n = S.data.lam.length;
+    const o = baseOpts('Ψ-остаток, σ', 'Δ-остаток, σ'); o.plugins.title = { display: true, text: 'Отпечаток: до и после', color: css('--text'), font: { size: 13, weight: '500' } };
+    const ds = [{ label: 'опорный фит', data: pts(Array.from(r0.slice(0, n)), Array.from(r0.slice(n))), backgroundColor: css('--muted'), pointRadius: 2, showLine: false }];
+    if (r1) ds.push({ label: 'окончательный фит', data: pts(Array.from(r1.slice(0, n)), Array.from(r1.slice(n))), backgroundColor: css('--ok'), pointRadius: 2, showLine: false });
+    S.charts.chFinger = new Chart($('chFinger'), { type: 'scatter', data: { datasets: ds }, options: o });
+  }
+  function drawN(curves) {
+    destroyChart('chN'); const o = baseOpts('Длина волны, нм', 'n'); o.plugins.title = { display: true, text: 'Показатель преломления плёнки', color: css('--text'), font: { size: 13, weight: '500' } };
+    const colors = [css('--muted'), css('--accent'), css('--warn')];
+    S.charts.chN = new Chart($('chN'), { type: 'line', data: { datasets: curves.map((c, i) => ({ label: c.label, data: pts(S.data.lam, c.n), borderColor: colors[i % 3], borderWidth: 1.5, borderDash: i === 0 ? [4, 3] : undefined, pointRadius: 0 })) }, options: o });
+  }
+
+  // ---------------------------------------------------------------- очистка панелей перед новым запуском шага k
+  function clearFrom(k) {
+    if (k <= 1) { $('refOut').className = 'empty'; $('refOut').textContent = 'Идёт опорный фит…'; $('chanOut').textContent = ''; destroyChart('chRes'); S.ref = null; S.refFeat = null; }
+    if (k <= 2) { $('trainOut').className = 'empty'; $('trainOut').textContent = k === 2 ? 'Идёт обучение…' : 'Сначала опорный фит.'; $('trainBar').style.width = '0%'; S.train = null; $('btn3').disabled = true; }
+    if (k <= 3) { $('diagOut').className = 'empty'; $('diagOut').textContent = k === 3 ? 'Идёт диагноз…' : 'Сначала обучение.'; $('modelChoice').style.display = 'none'; S.probs = null; S.est = null; S.aiFlags = null; $('btn4').disabled = true; }
+    if (k <= 4) { $('finOut').className = 'empty'; $('finOut').textContent = k === 4 ? 'Идёт окончательный фит…' : 'Сначала диагноз.'; $('truthOut').innerHTML = ''; $('causeOut').innerHTML = ''; ['chResFin', 'chFinger', 'chN'].forEach(destroyChart); S.fin = null; S.finFlags = null; }
+  }
+
+  // ---------------------------------------------------------------- шаг 1
+  function modelCurves(P) { const m = Object.assign({}, S.cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg }); return E.modelPsiDelta(S.data.lam, S.cfg.Nsub, S.cfg.phi, P.d, m, P.delta || 0, P.dRough || 0, 20); }
+  function step1() {
+    if (!S.data) return; clearFrom(1); readCfg();
+    const t = performance.now(); const ref = E.referenceFit(S.data, S.cfg, S.prior); S.ref = ref; const ms = performance.now() - t;
+    const c = modelCurves(ref.P); drawSpectrum({ label: 'однородная модель', psi: c.psi, del: c.del });
+    drawResidual('chRes', ref.resid, 'Остаток опорного фита однородной плёнки');
+    const x = E.featureVector(S.data, S.cfg, ref.resid); const ch = x.slice(-6); S.refFeat = x;
+    const tagChi = ref.chi2 < 2 ? 'ok' : (ref.chi2 < 10 ? 'warn' : 'bad');
+    $('refOut').className = ''; $('refOut').innerHTML = `<span class="tag ${tagChi}">χ²/ν = ${fmt(ref.chi2, 2)}</span><span class="tag">d = ${fmt(ref.P.d, 2)} ± ${fmt(ref.E.d, 2)} нм</span><span class="tag">A = ${fmt(ref.P.A, 1)}</span><span class="tag">A_uv = ${fmt(ref.P.Auv, 1)}</span><span class="tag">E_g = ${fmt(ref.P.Eg, 3)} эВ</span><span class="tag">${fmt(ms, 0)} мс</span>
+      <p class="note">${ref.chi2 < 2 ? 'Однородная модель описывает спектр в пределах шума: дефектов, различимых на этом уровне шума, скорее всего нет — ИИ подтвердит или опровергнет.' : 'Однородная модель отвергнута: остаток структурирован. Что именно не так — решает ИИ по форме остатка (шаг 2–3).'}</p>`;
+    const nHW = (() => { const { HW } = E.anchors(S.data.lam, S.data.del, S.cfg.subDel); return HW.length; })();
+    $('chanOut').innerHTML = nHW >= 2 ? `Каналы якорей (полуволновые точки найдены по Δ, их ${nHW}): Ψ в HW-якорях ${fmt(ch[0], 1)} ± ${fmt(ch[1], 1)} σ — канал градиента (знак: минус при росте n к поверхности); |Δ| в HW ${fmt(ch[2], 1)} σ и в QW ${fmt(ch[3], 1)} σ — канал шероховатости; RMS остатка Ψ/Δ ${fmt(ch[4], 1)}/${fmt(ch[5], 1)} σ.` : 'Полуволновых якорей меньше двух (тонкая плёнка или узкий диапазон): каналы якорей не используются, ИИ работает по сырому остатку.';
+    $('btn2').disabled = false; $('btn3').disabled = true; $('btn4').disabled = true; S.train = null; S.probs = null;
+  }
+
+  // ---------------------------------------------------------------- шаг 2 (порциями, чтобы не замораживать интерфейс)
+  function step2() {
+    return new Promise((resolve) => {
+      if (!S.ref) { resolve(false); return; }
+      clearFrom(2);
+      const N = +$('nTrain').value, rng = E.makeRng(+$('seed').value || 7); const X = [], y = [], sz = []; let i = 0; const t0 = performance.now();
+      $('trainOut').className = ''; $('btn2').disabled = true;
+      const tick = () => {
+        const tb = performance.now();
+        while (i < N && performance.now() - tb < 120) { const s = E.trainingExample(S.data, S.cfg, S.prior, S.nuis, rng, i % 6); X.push(s.x); y.push(s.y); sz.push([s.delta, s.dRough]); i++; }
+        $('trainBar').style.width = (100 * i / N).toFixed(0) + '%';
+        $('trainOut').textContent = `Смоделировано и профитировано ${i} из ${N} примеров (${((performance.now() - t0) / 1000).toFixed(0)} с)…`;
+        if (i < N) { setTimeout(tick, 0); return; }
+        $('trainOut').textContent = 'Обучение логистической регрессии…';
+        setTimeout(() => {
+          const idx = X.map((_, k) => k); for (let k = idx.length - 1; k > 0; k--) { const j = rng.int(k + 1); [idx[k], idx[j]] = [idx[j], idx[k]]; }
+          const nte = Math.max(30, Math.floor(N / 4)), te = idx.slice(0, nte), tr = idx.slice(nte);
+          const mHold = E.trainSoftmax(tr.map(k => X[k]), tr.map(k => y[k]), 6, { epochs: 250 });
+          let acc = 0, accBig = 0, nBig = 0;
+          for (const k of te) { const p = mHold.predictProba(X[k]); const kk = p.indexOf(Math.max(...p)); const big = (sz[k][0] === 0 || Math.abs(sz[k][0]) >= 0.004) && (sz[k][1] === 0 || sz[k][1] >= 0.4); if (kk === y[k]) { acc++; if (big) accBig++; } if (big) nBig++; }
+          const model = E.trainSoftmax(X, y, 6, { epochs: 250 });
+          const rd = E.ridge(X, sz.map(v => 100 * v[0]), 30), rr = E.ridge(X, sz.map(v => v[1]), 30);
+          let e1 = 0, e2 = 0; for (const k of te) { e1 += (rd.predict(X[k]) - 100 * sz[k][0]) ** 2; e2 += (rr.predict(X[k]) - sz[k][1]) ** 2; }
+          S.train = { model, rd, rr, N, acc: 100 * acc / nte, accBig: nBig ? 100 * accBig / nBig : NaN, rmseD: Math.sqrt(e1 / nte), rmseR: Math.sqrt(e2 / nte), sec: (performance.now() - t0) / 1000 };
+          $('trainOut').innerHTML = `<span class="tag">${N} примеров за ${fmt(S.train.sec, 0)} с</span><span class="tag ${S.train.acc > 75 ? 'ok' : 'warn'}">точность на отложенных ${fmt(S.train.acc, 1)} %</span><span class="tag">выше порога (|δ| ≥ 0.4 %, слой ≥ 0.4 нм): ${fmt(S.train.accBig, 1)} %</span><span class="tag">регрессия: δ ± ${fmt(S.train.rmseD, 2)} %, слой ± ${fmt(S.train.rmseR, 2)} нм</span>
+            <p class="note">Половина обучающих градиентов лежит в тонкой шкале (до 2 %), половина — от 2 % до заданного максимума, чтобы классификатор видел и малые, и большие неоднородности. Точность «по всем размерам» занижена примерами с дефектами ниже порога обнаружения — их не видно ни одному методу. Оценки регрессии в обучении внутри заданного разброса толщины и дисперсии ±5 %; при выходе за него нужно переобучение.</p>`;
+          $('btn3').disabled = false; $('btn2').disabled = false; resolve(true);
+        }, 10);
+      };
+      tick();
+    });
+  }
+
+  // ---------------------------------------------------------------- шаг 3
+  function step3() {
+    if (!S.train) return; clearFrom(3);
+    const x = S.refFeat; const p = S.train.model.predictProba(x); S.probs = p;
+    const order = p.map((v, i) => i).sort((a, b) => p[b] - p[a]); const best = order[0]; const cls = E.CLASSES[best];
+    const pGrad = p[1] + p[2] + p[4] + p[5], pRough = p[3] + p[4] + p[5], pNeg = p[2] + p[5];
+    const dEst = S.train.rd.predict(x), rEst = S.train.rr.predict(x);
+    S.est = { delta: dEst / 100, dRough: rEst };
+    $('diagOut').className = ''; $('diagOut').innerHTML = `<div class="probs">${order.map(i => `<span class="${i === best ? 'best' : ''}">${E.CLASSES[i].name}</span><div class="pb"><div style="width:${(100 * p[i]).toFixed(1)}%"></div></div><span class="${i === best ? 'best' : ''}">${fmt(100 * p[i], 1)} %</span>`).join('')}</div>
+      <div class="verdict">Наиболее вероятно: ${cls.name} (${fmt(100 * p[best], 1)} %)</div>
+      <div class="note">P(градиент) = ${fmt(100 * pGrad, 1)} % (из них n падает к поверхности: ${fmt(100 * pNeg, 1)} %), P(шероховатость) = ${fmt(100 * pRough, 1)} %. Оценка размеров регрессией: δ ≈ ${fmt(dEst, 2)} %, слой ≈ ${fmt(rEst, 2)} нм — это стартовые значения для окончательного фита.</div>`;
+    $('modelChoice').style.display = 'block'; $('ckGrad').checked = cls.g !== 0; $('ckRough').checked = cls.r === 1;
+    S.aiFlags = { grad: cls.g !== 0, rough: cls.r === 1, pBest: p[best] };
+    $('btn4').disabled = false;
+  }
+
+  // ---------------------------------------------------------------- шаг 4
+  function step4() {
+    if (!S.probs) return; clearFrom(4);
+    let flags = { grad: $('ckGrad').checked, rough: $('ckRough').checked };
+    const p0 = Object.assign({}, S.ref.P, { dRough: Math.max(0.1, S.est.dRough), delta: S.est.delta });
+    const t = performance.now(); let fin = E.finalFit(S.data, S.cfg, S.prior, flags, p0); let veto = [];
+    for (let pass = 0; pass < 2; pass++) {
+      let changed = false;
+      if (flags.rough && fin.P.dRough < 3 * (fin.E.dRough || 0.01)) { flags.rough = false; changed = true; veto.push('слой шероховатости не отличим от нуля на 3σ — убран'); }
+      if (flags.grad && Math.abs(fin.P.delta) < 3 * (fin.E.delta || 1e-4)) { flags.grad = false; changed = true; veto.push('градиент не отличим от нуля на 3σ — убран'); }
+      if (!changed) break; fin = E.finalFit(S.data, S.cfg, S.prior, flags, p0);
+    }
+    const ms = performance.now() - t; S.fin = fin; S.finFlags = flags;
+    const c = modelCurves(fin.P); drawSpectrum({ label: 'окончательная модель', psi: c.psi, del: c.del });
+    drawResidual('chResFin', fin.resid, 'Остаток окончательного фита'); drawFinger(S.ref.resid, fin.resid);
+    const mRef = Object.assign({}, S.cfg.mat, { A: S.ref.P.A, Auv: S.ref.P.Auv, Eg: S.ref.P.Eg }), mFin = Object.assign({}, S.cfg.mat, { A: fin.P.A, Auv: fin.P.Auv, Eg: fin.P.Eg });
+    const curves = [{ label: 'опорный фит', n: E.filmNK(S.data.lam, mRef).n }, { label: 'окончательный фит', n: E.filmNK(S.data.lam, mFin).n }];
+    const modelName = (flags.grad || flags.rough) ? ['однородная плёнка', flags.grad ? 'градиент' : null, flags.rough ? 'EMA-слой' : null].filter(Boolean).join(' + ') : 'однородная плёнка (дефектов нет)';
+    const nAt = (m, l) => E.filmNK([l], m).n[0];
+    const rows = [['Модель', modelName, ''], ['χ²/ν', `${fmt(fin.chi2, 2)} (опорный: ${fmt(S.ref.chi2, 1)})`, ''], ['Толщина d, нм', `${fmt(fin.P.d, 2)} ± ${fmt(fin.E.d, 2)}`, `опорный: ${fmt(S.ref.P.d, 2)}`]];
+    if (flags.grad) rows.push(['Градиент δ, %', `${fmt(100 * fin.P.delta, 3)} ± ${fmt(100 * fin.E.delta, 3)}`, fin.P.delta > 0 ? 'n растёт к поверхности' : 'n падает к поверхности']);
+    if (flags.rough) rows.push(['EMA-слой шероховатости, нм', `${fmt(fin.P.dRough, 3)} ± ${fmt(fin.E.dRough, 3)}`, 'Бруггеман 50/50; σ_rms ≈ 0.5–0.7 толщины']);
+    rows.push(['A, E_g, A_uv', `${fmt(fin.P.A, 1)}, ${fmt(fin.P.Eg, 3)} эВ, ${fmt(fin.P.Auv, 1)}`, `опорный: ${fmt(S.ref.P.A, 1)}, ${fmt(S.ref.P.Eg, 3)}, ${fmt(S.ref.P.Auv, 1)}`]);
+    for (const l of [450, 550, 650, 750]) if (l >= S.data.lam[0] && l <= S.data.lam[S.data.lam.length - 1]) rows.push([`n(${l} нм)`, fmt(nAt(mFin, l), 4), `опорный: ${fmt(nAt(mRef, l), 4)}`]);
+    const n = S.data.lam.length, rp = Array.from(fin.resid.slice(0, n)), rd = Array.from(fin.resid.slice(n)); const rms = a => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
+    $('finOut').className = ''; $('finOut').innerHTML = `<table><tr><th>параметр</th><th>окончательный фит</th><th>примечание</th></tr>${rows.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td class="note">${r[2]}</td></tr>`).join('')}</table>
+      <p class="note">${veto.length ? veto.join('; ') + '. ' : ''}RMS остатка после фита: Ψ ${fmt(rms(rp), 2)} σ, Δ ${fmt(rms(rd), 2)} σ; ${fin.chi2 < 2.5 ? 'остаток на уровне шума — модель закрыта.' : 'остаток выше шума: остаются неучтённые факторы (полоса, ошибка угла, дисперсия вне справочной формы) — параметры дефектов при этом обычно уже верны, но их погрешности заниженны.'} Погрешности — формальные, из якобиана; систематика (угол, полоса, шкала λ) в них не входит. Время фита ${fmt(ms, 0)} мс.</p>`;
+    if (S.example) {
+      const T = S.example.truth; const cT = E.CLASSES.findIndex(c => c.g === Math.sign(T.delta) && c.r === (T.dRough > 0 ? 1 : 0));
+      const bestCls = E.CLASSES.findIndex(c => c.g === (flags.grad ? Math.sign(fin.P.delta) : 0) && c.r === (flags.rough ? 1 : 0));
+      curves.push({ label: 'истина', n: E.filmNK(S.data.lam, T.mat).n });
+      const rowsT = [['Набор дефектов', E.CLASSES[cT].name, bestCls === cT ? '<span class="tag ok">совпадает</span>' : '<span class="tag bad">не совпадает</span>'], ['d, нм', fmt(T.d, 2), `ошибка ${fmt(fin.P.d - T.d, 2)} нм`],
+        ['δ, %', fmt(100 * T.delta, 2), `найдено ${flags.grad ? fmt(100 * fin.P.delta, 3) : '0 (не включён)'}`], ['EMA-слой, нм', fmt(T.dRough, 2), `найдено ${flags.rough ? fmt(fin.P.dRough, 3) : '0 (не включён)'}`],
+        ['n(550 нм)', fmt(nAt(T.mat, 550), 4), `найдено ${fmt(nAt(mFin, 550), 4)}`], ['Фактический угол, град', fmt(T.phiTrue, 2), `в анализе ${fmt(S.cfg.phi, 2)}`], ['Полоса, нм; сдвиг шкалы λ, нм', `${T.bw}; ${T.lamOffset}`, 'в модели фита не учитываются']];
+      $('truthOut').innerHTML = `<h3>Проверка по скрытой истине образца</h3><table><tr><th>параметр</th><th>истина</th><th>сравнение</th></tr>${rowsT.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</table>`;
+      $('causeOut').innerHTML = '<div class="status">Анализ причин отклонения…</div>';
+      setTimeout(causeAnalysis, 30);
+    } else { $('causeOut').innerHTML = ''; }
+    drawN(curves);
+  }
+
+  // ---------------------------------------------------------------- анализ причин отклонения от истины (только когда истина известна)
+  function causeAnalysis() {
+    if (!S.example || !S.fin) return;
+    const T = S.example.truth, fin = S.fin, flags = S.finFlags, lam = S.data.lam, nAt = (m, l) => E.filmNK([l], m).n[0];
+    const mFin = Object.assign({}, S.cfg.mat, { A: fin.P.A, Auv: fin.P.Auv, Eg: fin.P.Eg });
+    const trueFlags = { grad: T.delta !== 0, rough: T.dRough > 0 };
+    const classOK = flags.grad === trueFlags.grad && flags.rough === trueFlags.rough && (!flags.grad || Math.sign(fin.P.delta) === Math.sign(T.delta));
+    const dev = { d: fin.P.d - T.d, delta: (flags.grad ? fin.P.delta : 0) - T.delta, rough: (flags.rough ? fin.P.dRough : 0) - T.dRough, n: nAt(mFin, 550) - nAt(T.mat, 550) };
+    const significant = !classOK || Math.abs(dev.d) > 1.5 || Math.abs(dev.delta) > 0.002 || Math.abs(dev.rough) > 0.3 || Math.abs(dev.n) > 0.005;
+    const F = [];
+    const tag = (t, c) => `<span class="tag ${c || ''}">${t}</span>`;
+    // --- правила: почему набор дефектов мог быть выбран неверно
+    if (!classOK) {
+      const floorD = 0.004, floorR = 0.4;
+      if (trueFlags.grad && !flags.grad && Math.abs(T.delta) < floorD) F.push(`Градиент |δ| = ${fmt(100 * Math.abs(T.delta), 2)} % ниже порога обнаружения при этом шуме (≈ ${fmt(100 * floorD, 1)} %): его не видит ни ИИ, ни фит.`);
+      if (trueFlags.rough && !flags.rough && T.dRough < floorR) F.push(`Слой шероховатости ${fmt(T.dRough, 2)} нм ниже порога обнаружения (≈ ${floorR} нм).`);
+      if (S.aiFlags && S.aiFlags.pBest < 0.6) F.push(`ИИ-модель была не уверена: вероятность лучшего класса ${fmt(100 * S.aiFlags.pBest, 0)} %. Стоит увеличить число обучающих примеров и посмотреть на каналы якорей.`);
+      if (S.train && S.train.acc < 80) F.push(`Классификатор недообучен: точность на отложенных примерах ${fmt(S.train.acc, 0)} %. Увеличьте число примеров (ползунок) — точность растёт примерно до 1500–2000.`);
+      if (Math.abs(T.delta) > S.nuis.deltaMax + 1e-9) F.push(`Истинный градиент ${fmt(100 * T.delta, 2)} % вне диапазона обучения (макс. |δ| = ${fmt(100 * S.nuis.deltaMax, 1)} %): ИИ не видел таких остатков.`);
+      if (T.dRough > S.nuis.roughMax) F.push(`Истинный слой ${fmt(T.dRough, 2)} нм вне диапазона обучения (макс. ${S.nuis.roughMax} нм).`);
+      if (S.aiFlags && ((S.aiFlags.rough && !flags.rough && trueFlags.rough) || (S.aiFlags.grad && !flags.grad && trueFlags.grad))) F.push(`ИИ выбрал верно, но вето отбросило реальный дефект как незначимый на 3σ: дефект слишком мал для этих данных, либо его поглотили другие параметры.`);
+      if (trueFlags.rough && !flags.rough && S.refFeat && S.refFeat[S.refFeat.length - 4] > 5) F.push(`Канал шероховатости в опорном остатке (|Δ| в HW-якорях ${fmt(S.refFeat[S.refFeat.length - 4], 1)} σ) противоречит выбору ИИ — здесь стоило довериться каналу и включить слой вручную.`);
+      if (trueFlags.grad && !flags.grad && S.refFeat && Math.abs(S.refFeat[S.refFeat.length - 6]) > 5) F.push(`Канал градиента (Ψ в HW-якорях ${fmt(S.refFeat[S.refFeat.length - 6], 1)} σ) указывал на градиент, ИИ его не выбрал — включите градиент вручную и повторите фит; учтите, что этот же канал возбуждает и ошибка угла падения (см. бюджет ниже).`);
+      if (!F.length) F.push('Набор дефектов не совпал, хотя размеры выше порога и модель обучена: смотрите бюджет ниже — как правило, виновата систематика прибора, которую ИИ принял за дефект.');
+    }
+    if (T.d < S.prior.dMin || T.d > S.prior.dMax) F.push(`Истинная толщина ${fmt(T.d, 1)} нм вне априорного разброса [${fmt(S.prior.dMin, 0)}, ${fmt(S.prior.dMax, 0)}] нм: перебор толщины мог попасть в соседний порядок полос.`);
+    if (Math.abs(dev.d) > 20) F.push(`Толщина ошибочна на ${fmt(dev.d, 0)} нм — это порядок полосы (λ/2n), а не точность фита: неверный порядок интерференции или толщина вне разброса.`);
+    if (Math.abs(T.phiTrue - S.cfg.phi) > S.nuis.phiErr + 1e-9) F.push(`Фактический угол отличается от номинала на ${fmt(T.phiTrue - S.cfg.phi, 3)}°, больше заявленной неопределённости ±${S.nuis.phiErr}°: ошибка угла сдвигает линию подложки и имитирует градиент (≈0.3 % на 0.1° при 60–65°), поэтому ИИ обучался на остатках другого прибора. Лекарство — калибровка угла по подложке-свидетелю или второй угол.`);
+    if (Math.abs(T.bw - S.nuis.bw) > 0.3) F.push(`Полоса прибора в истине ${T.bw} нм, а в генераторе обучения ${S.nuis.bw} нм: обучающие остатки моделировали другой прибор.`);
+    // --- бюджет: последовательное устранение факторов при верном наборе дефектов
+    const p0 = Object.assign({}, S.ref.P, { d: T.d, dRough: T.dRough || 0.5, delta: T.delta || 0 });
+    const mk = (opt) => { const sy = E.synthesize(lam, S.cfg.subKey, T.phiTrue, T.d, T.mat, T.delta, T.dRough, opt, E.makeRng(1)); return { lam, psi: Array.from(sy.psi), del: Array.from(sy.del), sigPsi: S.data.sigPsi, sigDel: S.data.sigDel }; };
+    const cfg0 = S.cfg, cfgA = Object.assign({}, S.cfg, { phi: T.phiTrue, subDel: null });
+    const cfgAD = Object.assign({}, cfgA, { mat: Object.assign({}, S.cfg.mat, { E0: T.mat.E0, C: T.mat.C, Euv: T.mat.Euv }) });
+    const fitRow = (label, data, cfg) => { const r = E.finalFit(data, cfg, S.prior, trueFlags, p0); const m = Object.assign({}, cfg.mat, { A: r.P.A, Auv: r.P.Auv, Eg: r.P.Eg }); return { label, d: r.P.d, delta: trueFlags.grad ? r.P.delta : 0, rough: trueFlags.rough ? r.P.dRough : 0, n: nAt(m, 550), chi2: r.chi2 }; };
+    const rows = [{ label: 'измеренный спектр, модель по выбору ИИ (как есть)', d: fin.P.d, delta: flags.grad ? fin.P.delta : 0, rough: flags.rough ? fin.P.dRough : 0, n: nAt(mFin, 550), chi2: fin.chi2 }];
+    if (!classOK) rows.push(fitRow('измеренный спектр, верный набор дефектов', S.data, cfg0));
+    const hasDrift = !!T.driftPsi;
+    if (hasDrift) rows.push(fitRow('без шума (дрейф, полоса, сдвиг λ, угол — остаются)', mk({ bw: T.bw, lamOffset: T.lamOffset, driftPsi: T.driftPsi, driftDel: T.driftDel }), cfg0));
+    rows.push(fitRow(hasDrift ? '+ без дрейфа' : 'без шума и дрейфа (полоса, сдвиг λ, угол — остаются)', mk({ bw: T.bw, lamOffset: T.lamOffset }), cfg0));
+    rows.push(fitRow('+ без сдвига шкалы λ', mk({ bw: T.bw, lamOffset: 0 }), cfg0));
+    rows.push(fitRow('+ без спектральной полосы', mk({ bw: 0, lamOffset: 0 }), cfg0));
+    rows.push(fitRow('+ угол известен точно', mk({ bw: 0, lamOffset: 0 }), cfgA));
+    rows.push(fitRow('+ E₀, C, E_uv как у образца (остаётся только численная точность)', mk({ bw: 0, lamOffset: 0 }), cfgAD));
+    const truthRow = { label: 'истина', d: T.d, delta: T.delta, rough: T.dRough, n: nAt(T.mat, 550), chi2: NaN };
+    // вклад каждого фактора = изменение параметров при его устранении
+    const contrib = []; for (let i = 1; i < rows.length; i++) contrib.push({ label: rows[i].label, dd: rows[i - 1].d - rows[i].d, dDelta: rows[i - 1].delta - rows[i].delta, dRough: rows[i - 1].rough - rows[i].rough, dn: rows[i - 1].n - rows[i].n });
+    const last = rows[rows.length - 1]; const unexpl = { dd: last.d - T.d, dDelta: last.delta - T.delta, dRough: last.rough - T.dRough, dn: last.n - nAt(T.mat, 550) };
+    // словесные выводы по бюджету
+    const big = (v, thr) => Math.abs(v) > thr;
+    for (const c of contrib) {
+      const parts = []; if (big(c.dd, 0.3)) parts.push(`Δd ${fmt(c.dd, 2)} нм`); if (trueFlags.grad && big(c.dDelta, 0.0005)) parts.push(`Δδ ${fmt(100 * c.dDelta, 3)} %`); if (trueFlags.rough && big(c.dRough, 0.05)) parts.push(`Δслой ${fmt(c.dRough, 3)} нм`); if (big(c.dn, 0.0005)) parts.push(`Δn(550) ${fmt(c.dn, 4)}`);
+      if (parts.length) F.push(c.label.startsWith('измеренный спектр, верный') ? `С верным набором дефектов тот же спектр дал бы: ${parts.join(', ')} — остальное отклонение не связано с выбором модели.` : `${c.label.replace(/^\\+ /, '')}: ${parts.join(', ')} — этот фактор объясняет такую часть отклонения.`);
+    }
+    if (big(unexpl.dd, 0.3) || (trueFlags.grad && big(unexpl.dDelta, 0.0005)) || (trueFlags.rough && big(unexpl.dRough, 0.05)) || big(unexpl.dn, 0.0005)) F.push(`После устранения всех приборных факторов остаётся: Δd ${fmt(unexpl.dd, 2)} нм, Δδ ${fmt(100 * unexpl.dDelta, 3)} %, Δслой ${fmt(unexpl.dRough, 3)} нм, Δn(550) ${fmt(unexpl.dn, 4)} — это предел модели (лестница из 20 подслоёв против 40 в синтезе, EMA-смесь, локальный минимум) или численная точность фита.`);
+    else F.push('После устранения приборных факторов решение совпадает с истиной: модель дефектов адекватна, всё отклонение — систематика прибора и шум.');
+    const fr = (v, n) => (isFinite(v) ? Number(v).toFixed(n) : '—');
+    const cell = (r) => `<td class="num">${fr(r.d, 2)}</td><td class="num">${trueFlags.grad || flags.grad ? fr(100 * r.delta, 3) : '—'}</td><td class="num">${trueFlags.rough || flags.rough ? fr(r.rough, 3) : '—'}</td><td class="num">${fr(r.n, 4)}</td><td class="num">${fr(r.chi2, 2)}</td>`;
+    $('causeOut').innerHTML = `<h3>Анализ причин ${significant ? 'отклонения от истины' : '(отклонения в пределах ожидаемых)'}</h3>
+      <p>${tag(classOK ? 'набор дефектов верен' : 'набор дефектов неверен', classOK ? 'ok' : 'bad')}${tag(`Δd = ${fmt(dev.d, 2)} нм`, Math.abs(dev.d) > 1.5 ? 'warn' : 'ok')}${(trueFlags.grad || flags.grad) ? tag(`Δδ = ${fmt(100 * dev.delta, 3)} %`, Math.abs(dev.delta) > 0.002 ? 'warn' : 'ok') : ''}${(trueFlags.rough || flags.rough) ? tag(`Δслой = ${fmt(dev.rough, 3)} нм`, Math.abs(dev.rough) > 0.3 ? 'warn' : 'ok') : ''}${tag(`Δn(550) = ${fmt(dev.n, 4)}`, Math.abs(dev.n) > 0.005 ? 'warn' : 'ok')}</p>
+      <ul class="note" style="margin:6px 0 10px 18px;padding:0">${F.map(f => `<li>${f}</li>`).join('')}</ul>
+      <details ${significant ? 'open' : ''}><summary>Бюджет отклонения: фит при верном наборе дефектов с последовательным устранением факторов</summary>
+      <table><tr><th>вариант</th><th class="num">d, нм</th><th class="num">δ, %</th><th class="num">слой, нм</th><th class="num">n(550)</th><th class="num">χ²/ν</th></tr>
+      ${rows.map(r => `<tr><td>${r.label}</td>${cell(r)}</tr>`).join('')}<tr><td><b>истина</b></td>${cell(truthRow)}</tr></table>
+      <p class="note">Каждая строка — тот же фит на спектре, синтезированном из истины с постепенно убираемыми искажениями; разность соседних строк — вклад убранного фактора. Порог «значимого» отклонения: 1.5 нм по толщине, 0.2 % по градиенту, 0.3 нм по слою, 0.005 по n.</p></details>`;
+  }
+
+
+  // ---------------------------------------------------------------- симулятор измерения
+  function simulate() {
+    const matKey = matSel.value, subKey = subSel.value, phiNom = +$('phi').value;
+    const l0 = +$('simL0').value, l1 = +$('simL1').value, dl = Math.max(0.25, +$('simDL').value || 2);
+    if (!(l1 > l0 + 20)) { $('simStatus').textContent = 'Диапазон длин волн задан неверно.'; return; }
+    const lam = []; for (let l = l0; l <= l1 + 1e-9; l += dl) lam.push(+l.toFixed(3));
+    if (lam.length < 20 || lam.length > 3000) { $('simStatus').textContent = 'Нужно от 20 до 3000 точек.'; return; }
+    const mRef = { A: +$('mA').value, E0: +$('mE0').value, C: +$('mC').value, Eg: +$('mEg').value, Auv: +$('mAuv').value, Euv: +$('mEuv').value, name: E.MATERIALS[matKey].name };
+    const mTrue = Object.assign({}, mRef, { A: mRef.A * (1 + (+$('simDA').value || 0) / 100), Auv: Math.max(0, mRef.Auv * (1 + (+$('simDAuv').value || 0) / 100)), E0: mRef.E0 + (+$('simDE0').value || 0), C: mRef.C + (+$('simDC').value || 0), Eg: mRef.Eg + (+$('simDEg').value || 0) });
+    if (!(mTrue.Eg > 1 && mTrue.Eg < mTrue.E0 - 0.1 && 4 * mTrue.E0 * mTrue.E0 > mTrue.C * mTrue.C)) { $('simStatus').textContent = 'Параметры дисперсии физически недопустимы (нужно E_g < E₀, C < 2E₀).'; return; }
+    const d = +$('simD').value, delta = (+$('simDelta').value || 0) / 100, dRough = Math.max(0, +$('simRough').value || 0);
+    if (Math.abs(delta) > 0.20) { $('simStatus').textContent = 'Градиент ограничен ±20 % (линейный профиль n(z) с большим перепадом физически сомнителен и выходит за границы фита).'; return; }
+    const phiTrue = phiNom + (+$('simDphi').value || 0), bw = Math.max(0, +$('simBw').value || 0), off = +$('simOff').value || 0;
+    const rng = E.makeRng((+$('simSeed').value || 1) >>> 0);
+    const clean = E.synthesize(lam, subKey, phiTrue, d, mTrue, delta, dRough, { bw, lamOffset: off }, rng);
+    const sB = +$('simSig').value || 0.015, sG = +$('simSigBlue').value || 0, ratio = +$('simSigRatio').value || 2.2;
+    const sigPsi = lam.map(l => sB + sG * Math.max(0, (650 - l) / 250) ** 2);
+    const sigDel = sigPsi.map((v, i) => ratio * v / Math.max(Math.sin(2 * clean.psi[i] * Math.PI / 180), 0.15));
+    const drP = +$('simDrP').value || 0, drD = +$('simDrD').value || 0;
+    const driftPsi = [drP, rng.range(-1, 1) * drP], driftDel = [drD, rng.range(-1, 1) * drD];
+    const s = E.synthesize(lam, subKey, phiTrue, d, mTrue, delta, dRough, { bw, lamOffset: off, driftPsi, driftDel, sigPsi, sigDel }, rng);
+    const title = `симуляция: ${E.MATERIALS[matKey].name} на ${E.SUBSTRATES[subKey].name.split(' (')[0]}, ${phiNom}°`;
+    const example = { title, truth: { d, delta, dRough, phiTrue, bw, lamOffset: off, mat: mTrue, driftPsi, driftDel } };
+    exSel.value = '';
+    setData({ lam, psi: Array.from(s.psi), del: Array.from(s.del), sigPsi, sigDel, hasSigma: true }, example);
+    const dNom = +$('dNom').value, rg = +$('dRange').value / 100;
+    const inRange = d >= dNom * (1 - rg) && d <= dNom * (1 + rg);
+    $('simStatus').textContent = `Сгенерировано ${lam.length} точек. ` + (inRange ? 'Истинная толщина внутри априорного разброса.' : 'Внимание: истинная толщина вне априорного разброса — опорный фит её не найдёт; поправьте номинал или разброс.');
+    $('btnCsv').disabled = false;
+  }
+  $('btnSim').addEventListener('click', simulate);
+  $('btnCsv').addEventListener('click', async () => {
+    if (!S.data) return; const d = S.data;
+    const csv = ['lambda_nm;Psi_deg;Delta_deg;sigPsi_deg;sigDelta_deg'].concat(d.lam.map((l, i) => [l, d.psi[i].toFixed(4), d.del[i].toFixed(4), d.sigPsi[i].toFixed(4), d.sigDel[i].toFixed(4)].join(';'))).join('\n');
+    try { await navigator.clipboard.writeText(csv); $('simStatus').textContent = 'Спектр скопирован в буфер обмена (CSV, разделитель «;»).'; }
+    catch (e) { const ta = document.createElement('textarea'); ta.value = csv; ta.style.width = '100%'; ta.rows = 8; $('simStatus').innerHTML = 'Буфер недоступен — скопируйте из поля:'; $('simStatus').appendChild(ta); ta.select(); }
+  });
+  // при выборе материала/номинала подставлять истину симулятора рядом с номиналом
+  $('dNom').addEventListener('change', () => { if (!$('simD').dataset.touched) $('simD').value = (+$('dNom').value * 1.017).toFixed(1); });
+  $('simD').addEventListener('input', () => { $('simD').dataset.touched = '1'; });
+  // ---------------------------------------------------------------- кнопки
+  $('btn1').addEventListener('click', step1);
+  $('btn2').addEventListener('click', () => step2());
+  $('btn3').addEventListener('click', step3);
+  $('btn4').addEventListener('click', step4);
+  $('btnAll').addEventListener('click', async () => {
+    if (!S.data) { $('globalStatus').textContent = 'Сначала выберите спектр.'; return; }
+    $('btnAll').disabled = true; $('globalStatus').textContent = 'Опорный фит…'; await new Promise(r => setTimeout(r, 20));
+    step1(); $('globalStatus').textContent = 'Обучение ИИ…'; await step2(); $('globalStatus').textContent = 'Диагноз и окончательный фит…'; await new Promise(r => setTimeout(r, 20));
+    step3(); step4(); $('globalStatus').textContent = 'Готово.'; $('btnAll').disabled = false;
+    if ($('s4').scrollIntoView) $('s4').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  window.addEventListener('resize', () => { for (const c of Object.values(S.charts)) c.resize(); });
+  // стартовое состояние: первый тестовый образец
+  exSel.value = '0'; exSel.dispatchEvent(new Event('change'));
+})();
+</script>
+</body>
+</html>

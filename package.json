@@ -1,0 +1,17 @@
+{
+  "name": "se-ai",
+  "version": "1.0.0",
+  "description": "Дефекты тонкой плёнки по остатку эллипсометрического фита: опорный фит однородной плёнки, ИИ-модель на смоделированных остатках, окончательный фит",
+  "private": true,
+  "scripts": {
+    "build": "node tools/build.js",
+    "examples": "node tools/gen_examples.js && python3 tools/write_xlsx.py",
+    "examples:check": "node tools/gen_examples.js --check",
+    "test": "node test/run_examples.js 300",
+    "test:ui": "node test/ui_smoke.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  },
+  "license": "UNLICENSED"
+}

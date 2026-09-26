@@ -24,7 +24,8 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   check(/Анализ причин/.test(txt($("causeOut"))), "разбор причин отображён");
   console.log("2. Симуляция: TiO2/BK7, δ = +8 %, слой 1 нм");
   $("simD").value = "1017.3"; $("simDelta").value = "8"; $("simRough").value = "1.0"; $("simDphi").value = "0.02"; $("simSeed").value = "9"; $("deltaMax").value = "10";
-  $("btnSim").click(); check(/Сгенерировано/.test($("simStatus").textContent), "спектр сгенерирован");
+  $("btnSim").click(); { const t0 = Date.now(); while (!/Сгенерировано|неверно|Нужно|ограничен/.test($("simStatus").textContent) && Date.now() - t0 < 60000) await new Promise(r => setTimeout(r, 100)); }
+  check(/Сгенерировано/.test($("simStatus").textContent), "спектр сгенерирован (непрерывный профиль, Риккати)");
   check(/Сначала диагноз/.test(txt($("finOut"))) && $("causeOut").innerHTML === "", "панели шагов 2–4 очищены после генерации");
   sec = await runAll(200); const tr2 = truthRows();
   check(!/не совпадает/.test(tr2["Набор дефектов"][2]), `набор дефектов совпал (${sec.toFixed(0)} с)`);

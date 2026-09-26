@@ -211,7 +211,7 @@ footer { padding: 6px 28px 24px; color: var(--muted); font-size: 12.5px; max-wid
 
   <section class="step" id="s1">
     <h2><span class="num">1</span>Опорный фит: однородная плёнка</h2>
-    <p class="lead">Толщина ищется грубым перебором в заданном разбросе, затем метод Левенберга–Марквардта по d, A, A_uv, E_g. Остаток (измерено − модель) в единицах σ — то, что модель не смогла объяснить.</p>
+    <p class="lead">Толщина ищется грубым перебором в заданном разбросе, затем метод Левенберга–Марквардта с аналитическим якобианом (формулы Фурмана–Тихонравова, разд. 1.4.1) по d, A, A_uv, E_g из трёх лучших стартов. Остаток (измерено − модель) в единицах σ — то, что модель не смогла объяснить.</p>
     <div id="refOut" class="empty">Загрузите спектр и нажмите «Опорный фит».</div>
     <div class="chart"><canvas id="chRes"></canvas></div>
     <div id="chanOut" class="note"></div>
@@ -236,7 +236,7 @@ footer { padding: 6px 28px 24px; color: var(--muted); font-size: 12.5px; max-wid
 
   <section class="step" id="s4">
     <h2><span class="num">4</span>Окончательный фит и решение</h2>
-    <p class="lead">Фит в выбранной модели: однородная плёнка плюс слой Бруггемана (50 % плёнка / 50 % пустота) и/или линейный градиент показателя (лестница из 20 подслоёв). Параметр дефекта, не отличимый от нуля на 3σ, отбрасывается, и фит повторяется.</p>
+    <p class="lead">Фит в выбранной модели: однородная плёнка плюс слой Бруггемана (50 % плёнка / 50 % пустота) и/или линейный градиент показателя (лестница из 40 подслоёв, 80 при |δ| &gt; 4 %). Несколько стартов — толщины из перебора опорного фита и оба знака градиента — разведываются на грубой модели, лучший дотягивается на точной. Параметр дефекта, не отличимый от нуля на 3σ, отбрасывается, и фит повторяется.</p>
     <div id="finOut" class="empty">Сначала диагноз.</div>
     <div class="grid2">
       <div class="chart"><canvas id="chResFin"></canvas></div>
@@ -439,7 +439,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   function step4() {
     if (!S.probs) return; clearFrom(4);
     let flags = { grad: $('ckGrad').checked, rough: $('ckRough').checked };
-    const p0 = Object.assign({}, S.ref.P, { dRough: Math.max(0.1, S.est.dRough), delta: S.est.delta });
+    const p0 = Object.assign({}, S.ref.P, { dRough: Math.max(0.1, S.est.dRough), delta: S.est.delta, starts: S.ref.starts, startCosts: S.ref.startCosts });
     const t = performance.now(); let fin = E.finalFit(S.data, S.cfg, S.prior, flags, p0); let veto = [];
     for (let pass = 0; pass < 2; pass++) {
       let changed = false;
@@ -461,7 +461,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     for (const l of [450, 550, 650, 750]) if (l >= S.data.lam[0] && l <= S.data.lam[S.data.lam.length - 1]) rows.push([`n(${l} нм)`, fmt(nAt(mFin, l), 4), `опорный: ${fmt(nAt(mRef, l), 4)}`]);
     const n = S.data.lam.length, rp = Array.from(fin.resid.slice(0, n)), rd = Array.from(fin.resid.slice(n)); const rms = a => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
     $('finOut').className = ''; $('finOut').innerHTML = `<table><tr><th>параметр</th><th>окончательный фит</th><th>примечание</th></tr>${rows.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td class="note">${r[2]}</td></tr>`).join('')}</table>
-      <p class="note">${veto.length ? veto.join('; ') + '. ' : ''}RMS остатка после фита: Ψ ${fmt(rms(rp), 2)} σ, Δ ${fmt(rms(rd), 2)} σ; ${fin.chi2 < 2.5 ? 'остаток на уровне шума — модель закрыта.' : 'остаток выше шума: остаются неучтённые факторы (полоса, ошибка угла, дисперсия вне справочной формы) — параметры дефектов при этом обычно уже верны, но их погрешности заниженны.'} Погрешности — формальные, из якобиана; систематика (угол, полоса, шкала λ) в них не входит. Время фита ${fmt(ms, 0)} мс.</p>`;
+      <p class="note">${veto.length ? veto.join('; ') + '. ' : ''}RMS остатка после фита: Ψ ${fmt(rms(rp), 2)} σ, Δ ${fmt(rms(rd), 2)} σ; ${fin.chi2 < 2.5 ? 'остаток на уровне шума — модель закрыта.' : 'остаток выше шума: остаются неучтённые факторы (полоса, ошибка угла, дисперсия вне справочной формы) — параметры дефектов при этом обычно уже верны, но их погрешности заниженны.'} Погрешности — формальные, из аналитического якобиана; систематика (угол, полоса, шкала λ) в них не входит. Стартов ${fin.starts || 1}, время фита ${fmt(ms, 0)} мс.</p>`;
     if (S.example) {
       const T = S.example.truth; const cT = E.CLASSES.findIndex(c => c.g === Math.sign(T.delta) && c.r === (T.dRough > 0 ? 1 : 0));
       const bestCls = E.CLASSES.findIndex(c => c.g === (flags.grad ? Math.sign(fin.P.delta) : 0) && c.r === (flags.rough ? 1 : 0));

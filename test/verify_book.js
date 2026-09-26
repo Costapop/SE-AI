@@ -198,5 +198,26 @@ console.log("\n4. Сохранение энергии, френелевские 
   check(qz[1] < 0, `Im(N cos γ) = ${qz[1].toFixed(4)} < 0 для c-Si при 400 нм: прошедшая волна затухает (требование книги для exp(+iωt))`);
 }
 
+// ================================================================ 6. Аналитический якобиан (разд. 1.4.1) против конечных разностей
+console.log("\n5. Аналитический якобиан по формулам 1.4.9–1.4.16 (матрицы D_j, N_j, Ψ_r, следы) против центральных разностей");
+{
+  const lam = []; for (let l = 400; l <= 800; l += 2) lam.push(l);
+  const sig = lam.map(l => 0.015 + 0.02 * Math.max(0, (650 - l) / 250) ** 2), sigD = sig.map(v => 2.2 * v);
+  const free = ["d", "A", "Auv", "Eg", "dRough", "delta"], hs = { d: 1e-3, A: 1e-3, Auv: 1e-3, Eg: 1e-6, dRough: 1e-4, delta: 1e-6 };
+  for (const [subKey, phi, matKey, P] of [["bk7", 65, "tio2", { d: 1017.3, A: 262, Auv: 131, Eg: 3.37, dRough: 2.2, delta: -0.008 }], ["si", 70, "si3n4", { d: 612.5, A: 160, Auv: 100, Eg: 4.65, dRough: 0.9, delta: 0.05 }]]) {
+    const mat = E.MATERIALS[matKey], cfg = { mat, subKey, Nsub: E.substrateN(subKey, lam), phi };
+    const data = { lam, psi: new Float64Array(lam.length), del: new Float64Array(lam.length), sigPsi: sig, sigDel: sigD };
+    const fn = E.makeResidJacFn(data, cfg, free, {}, 40), x0 = free.map(k => P[k]), ev = fn(x0, true);
+    let worst = 0;
+    for (let p = 0; p < free.length; p++) {
+      const h = hs[free[p]], xp = x0.slice(), xm = x0.slice(); xp[p] += h; xm[p] -= h;
+      const rp = fn(xp, false).r, rm = fn(xm, false).r; let maxAbs = 0, norm = 0;
+      for (let i = 0; i < rp.length; i++) { const num = (rp[i] - rm[i]) / (2 * h); maxAbs = Math.max(maxAbs, Math.abs(num - ev.J[p][i])); norm = Math.max(norm, Math.abs(num)); }
+      worst = Math.max(worst, maxAbs / norm);
+    }
+    check(worst < 1e-6, `${mat.name} на ${subKey}, ${phi}°, 42 слоя, 6 параметров (d, A, A_uv, E_g, слой ЭС, δ): макс. относительное расхождение ${worst.toExponential(1)}`);
+  }
+}
+
 console.log(failures ? `\nОШИБОК: ${failures}` : "\nВсе проверки по книге пройдены");
 process.exit(failures ? 1 : 0);

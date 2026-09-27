@@ -204,6 +204,106 @@
     }
     return { N, C, S };
   }
+  /** Ψ, Δ (град) из нормированных элементов матрицы Мюллера: Ψ = ½ arccos N, Δ = atan2(S, C) ∈ [0, 360). */
+  function psiDeltaFromNCS(N, C, S) {
+    const n = N.length, psi = new Float64Array(n), del = new Float64Array(n);
+    for (let i = 0; i < n; i++) { psi[i] = 0.5 * Math.acos(Math.max(-1, Math.min(1, N[i]))) * 180 / PI; let d = Math.atan2(S[i], C[i]) * 180 / PI; if (d < 0) d += 360; del[i] = d; }
+    return { psi, del };
+  }
+
+  // ---------------------------------------------------------------- задняя сторона подложки: некогерентное сложение пучков
+  /** Коэффициенты стопки матричным методом Абелеса в конвенции книги (тангенциальные амплитуды E, exp(+iωt), N = n − ik) на одной λ:
+   *  r — отражение из внешней среды, t — пропускание в подложку, rb — отражение стопки со стороны подложки, tb — пропускание из подложки наружу.
+   *  Для стопки в обратном порядке M′ = J Mᵀ J = [[m22, m12], [m21, m11]], поэтому при том же знаменателе
+   *  den = q_a m11 + q_a q_s m12 + q_s m22 + m21: r = (q_a m11 + q_a q_s m12 − q_s m22 − m21)/den, t = 2q_a/den,
+   *  rb = (−q_a m11 + q_a q_s m12 + q_s m22 − m21)/den, tb = 2q_s/den. Возвращает {s: {...}, p: {...}, cs: cos γ подложки}. */
+  function stackCoefs(lam1, layersAt, Nsub1, phi) {
+    const s0 = Math.sin(phi * PI / 180), s02 = s0 * s0, c0 = Math.cos(phi * PI / 180), k = 2 * PI / lam1, out = {};
+    const cs = cosT(Nsub1, s02);
+    for (const pol of ['s', 'p']) {
+      const isS = pol === 's', qa = [isS ? c0 : 1 / c0, 0], qs = isS ? cmul(Nsub1, cs) : cdiv(Nsub1, cs);
+      let m11 = [1, 0], m12 = [0, 0], m21 = [0, 0], m22 = [1, 0];
+      for (const L of layersAt) {                                                // сверху вниз: M = M_0 M_1 ⋯
+        const c = cosT(L.N, s02), q = isS ? cmul(L.N, c) : cdiv(L.N, c), ph = cmul([k * L.d, 0], cmul(L.N, c));
+        const cp = ccos(ph), sp = csin(ph), b = cdiv([-sp[1], sp[0]], q), cq = cmul([0, 1], cmul(q, sp));   // b = (i/q) sin φ, cq = i q sin φ
+        const n11 = cadd(cmul(m11, cp), cmul(m12, cq)), n12 = cadd(cmul(m11, b), cmul(m12, cp));
+        const n21 = cadd(cmul(m21, cp), cmul(m22, cq)), n22 = cadd(cmul(m21, b), cmul(m22, cp));
+        m11 = n11; m12 = n12; m21 = n21; m22 = n22;
+      }
+      const a11 = cmul(qa, m11), a12 = cmul(cmul(qa, qs), m12), a22 = cmul(qs, m22);
+      const den = cadd(cadd(a11, a12), cadd(a22, m21));
+      out[pol] = { r: cdiv(csub(cadd(a11, a12), cadd(a22, m21)), den), t: cdiv([2 * qa[0], 0], den),
+        rb: cdiv(cadd(csub(a12, a11), csub(a22, m21)), den), tb: cdiv([2 * qs[0], 2 * qs[1]], den), qa, qs };
+    }
+    out.cs = cs;
+    return out;
+  }
+  /** N, C, S с некогерентным вкладом отражения от задней стороны подложки (плоскопараллельная подложка, задняя граница — с воздухом).
+   *  back = {f, ds}: f — доля света задней стороны, попадающая в детектор (задана, не фитируется), ds — толщина подложки, нм
+   *  (нужна только для затухания в поглощающей подложке: для стекла w = 1, для c-Si w ≈ 0).
+   *  Пучок m ≥ 1: A_j = t_j (r^b_j)^m (r′_j)^{m−1} t′_j, фазы хода по подложке одинаковы для p и s и в A_p A_s* сокращаются, поэтому
+   *  Σ|A_j|² = |t_j t′_j|² |r^b_j|² w / (1 − |r′_j r^b_j|² w), Σ A_p A_s* = t_p t′_p (t_s t′_s)* r^b_p r^b_s* w / (1 − r′_p r′_s* r^b_p r^b_s* w),
+   *  w = |exp(−2ik d_s N_s cos γ_s)|². Матрицы Мюллера пучков складываются; знак p приводится к эллипсометрическому (C, S → −C, −S). */
+  function ncsBackside(lam, layers, Nsub, phi, back) {
+    // та же математика, что в stackCoefs, но без промежуточных аллокаций (скалярная комплексная арифметика)
+    const n = lam.length, N = new Float64Array(n), C = new Float64Array(n), S = new Float64Array(n), f = back.f, ds = back.ds || 0;
+    const s0 = Math.sin(phi * PI / 180), s02 = s0 * s0, c0 = Math.cos(phi * PI / 180), L = layers.length;
+    // cos γ = sqrt(1 − s0²/N²) для N = (Nr, Ni): результат в (cr, ci)
+    let cr = 0, ci = 0;
+    const cosG = (Nr, Ni) => { const N2r = Nr * Nr - Ni * Ni, N2i = 2 * Nr * Ni, den = N2r * N2r + N2i * N2i, ar = 1 - s02 * N2r / den, ai = s02 * N2i / den, mod = Math.hypot(ar, ai); cr = Math.sqrt(Math.max(0, (mod + ar) / 2)); ci = Math.sqrt(Math.max(0, (mod - ar) / 2)); if (ai < 0) ci = -ci; };
+    for (let i = 0; i < n; i++) {
+      const k = 2 * PI / lam[i], Nbr = Nsub[i][0], Nbi = Nsub[i][1];
+      cosG(Nbr, Nbi); const cbr = cr, cbi = ci;
+      const w = Math.exp(4 * k * ds * (Nbr * cbi + Nbi * cbr));            // |exp(−2ik d_s N_s cos γ_s)|², Im(N cos γ) ≤ 0
+      // на каждую поляризацию: r, t·t′ (произведение), r′, отражение задней грани r^b, q_a, q_s
+      const R = [[0, 0], [0, 0]], U = [[0, 0], [0, 0]], RB = [[0, 0], [0, 0]], RQ = [[0, 0], [0, 0]];
+      for (let pol = 0; pol < 2; pol++) {
+        const isS = pol === 0, qar = isS ? c0 : 1 / c0;
+        let qsr, qsi; if (isS) { qsr = Nbr * cbr - Nbi * cbi; qsi = Nbr * cbi + Nbi * cbr; } else { const dd = cbr * cbr + cbi * cbi; qsr = (Nbr * cbr + Nbi * cbi) / dd; qsi = (Nbi * cbr - Nbr * cbi) / dd; }
+        let m11r = 1, m11i = 0, m12r = 0, m12i = 0, m21r = 0, m21i = 0, m22r = 1, m22i = 0;
+        for (let a = 0; a < L; a++) {
+          const Nr = layers[a].N[i][0], Ni = layers[a].N[i][1], dj = layers[a].d;
+          cosG(Nr, Ni);
+          const ncr = Nr * cr - Ni * ci, nci = Nr * ci + Ni * cr;           // N cos γ
+          let qr, qi; if (isS) { qr = ncr; qi = nci; } else { const dd = cr * cr + ci * ci; qr = (Nr * cr + Ni * ci) / dd; qi = (Ni * cr - Nr * ci) / dd; }
+          const phr = k * dj * ncr, phi_ = k * dj * nci;
+          const cpr = Math.cos(phr) * Math.cosh(phi_), cpi = -Math.sin(phr) * Math.sinh(phi_), spr = Math.sin(phr) * Math.cosh(phi_), spi = Math.cos(phr) * Math.sinh(phi_);
+          const qq = qr * qr + qi * qi, br = (-spi * qr + spr * qi) / qq, bi = (spr * qr + spi * qi) / qq;   // b = i sin φ / q
+          const cqr = -(qr * spi + qi * spr), cqi = qr * spr - qi * spi;                                     // c = i q sin φ
+          // M ← M · [[cp, b], [c, cp]]
+          const n11r = m11r * cpr - m11i * cpi + m12r * cqr - m12i * cqi, n11i = m11r * cpi + m11i * cpr + m12r * cqi + m12i * cqr;
+          const n12r = m11r * br - m11i * bi + m12r * cpr - m12i * cpi, n12i = m11r * bi + m11i * br + m12r * cpi + m12i * cpr;
+          const n21r = m21r * cpr - m21i * cpi + m22r * cqr - m22i * cqi, n21i = m21r * cpi + m21i * cpr + m22r * cqi + m22i * cqr;
+          const n22r = m21r * br - m21i * bi + m22r * cpr - m22i * cpi, n22i = m21r * bi + m21i * br + m22r * cpi + m22i * cpr;
+          m11r = n11r; m11i = n11i; m12r = n12r; m12i = n12i; m21r = n21r; m21i = n21i; m22r = n22r; m22i = n22i;
+        }
+        // a11 = q_a m11, a12 = q_a q_s m12, a22 = q_s m22
+        const a11r = qar * m11r, a11i = qar * m11i;
+        const a12r = qar * (qsr * m12r - qsi * m12i), a12i = qar * (qsr * m12i + qsi * m12r);
+        const a22r = qsr * m22r - qsi * m22i, a22i = qsr * m22i + qsi * m22r;
+        const dr = a11r + a12r + a22r + m21r, di = a11i + a12i + a22i + m21i, dm = dr * dr + di * di;
+        const inv = (xr, xi) => [(xr * dr + xi * di) / dm, (xi * dr - xr * di) / dm];               // x / den
+        R[pol] = inv(a11r + a12r - a22r - m21r, a11i + a12i - a22i - m21i);                          // r
+        const t = inv(2 * qar, 0), tb = inv(2 * qsr, 2 * qsi);
+        U[pol] = [t[0] * tb[0] - t[1] * tb[1], t[0] * tb[1] + t[1] * tb[0]];                          // t·t′
+        RQ[pol] = inv(-a11r + a12r + a22r - m21r, -a11i + a12i + a22i - m21i);                       // r′ (со стороны подложки)
+        const sr = qsr - qar, si = qsi, tr_ = qsr + qar, ti_ = qsi, tm = tr_ * tr_ + ti_ * ti_;
+        RB[pol] = [(sr * tr_ + si * ti_) / tm, (si * tr_ - sr * ti_) / tm];                          // r^b = (q_s − q_a)/(q_s + q_a): задняя грань → воздух
+      }
+      const abs2 = (a) => a[0] * a[0] + a[1] * a[1], mulc = (a, b) => [a[0] * b[0] + a[1] * b[1], a[1] * b[0] - a[0] * b[1]];   // a·conj(b)
+      const Bs = abs2(U[0]) * abs2(RB[0]) * w / (1 - abs2(RQ[0]) * abs2(RB[0]) * w), Bp = abs2(U[1]) * abs2(RB[1]) * w / (1 - abs2(RQ[1]) * abs2(RB[1]) * w);
+      const uu = mulc(U[1], U[0]), bb = mulc(RB[1], RB[0]), gg = mulc(RQ[1], RQ[0]);
+      const numr = (uu[0] * bb[0] - uu[1] * bb[1]) * w, numi = (uu[0] * bb[1] + uu[1] * bb[0]) * w;
+      const gbr = gg[0] * bb[0] - gg[1] * bb[1], gbi = gg[0] * bb[1] + gg[1] * bb[0], dnr = 1 - gbr * w, dni = -gbi * w, dnm = dnr * dnr + dni * dni;
+      const Xr = (numr * dnr + numi * dni) / dnm, Xi = (numi * dnr - numr * dni) / dnm;
+      const rr_ = mulc(R[1], R[0]);
+      const Ip = abs2(R[1]) + f * Bp, Is = abs2(R[0]) + f * Bs, Zr = rr_[0] + f * Xr, Zi = rr_[1] + f * Xi, tot = Ip + Is;
+      N[i] = (Is - Ip) / tot; C[i] = -2 * Zr / tot; S[i] = -2 * Zi / tot;
+    }
+    return { N, C, S };
+  }
+  /** Активна ли задняя сторона: back = {f > 0, ds}. */
+  const backOn = (back) => !!(back && back.f > 0);
   /** Непрерывный линейный профиль n(z) = n·[1 + δ(z/d − ½)]: уравнение Риккати для локальной функции отражения
    *  (Furman & Tikhonravov, 1.1.19, 1.1.20), RK4 с шагом h (нм); EMA-слой сверху добавляется по Эйри.
    *  Возвращает [RP, RS] в конвенции ядра (r_p как в эллипсометрии, т.е. −r_p книги). */
@@ -250,23 +350,27 @@
     }
     return [RP, RS];
   }
-  /** Ψ, Δ модели на сетке lam (без полосы). */
-  function modelPsiDelta(lam, Nsub, phi, d, m, delta, dRough, M) {
-    const [RP, RS] = rhoStack(lam, buildLayers(lam, d, m, delta || 0, dRough || 0, M || 20), Nsub, phi);
+  /** Ψ, Δ модели на сетке lam (без полосы); back = {f, ds} — задняя сторона подложки (некогерентно), null — без неё. */
+  function modelPsiDelta(lam, Nsub, phi, d, m, delta, dRough, M, back) {
+    const layers = buildLayers(lam, d, m, delta || 0, dRough || 0, M || 20);
+    if (backOn(back)) { const { N, C, S } = ncsBackside(lam, layers, Nsub, phi, back); return psiDeltaFromNCS(N, C, S); }
+    const [RP, RS] = rhoStack(lam, layers, Nsub, phi);
     return psiDeltaFromR(RP, RS);
   }
   /** Чистый спектр «измерения»: полоса (свёртка N, C, S на мелкой сетке), сдвиг шкалы, фактический угол.
-   *  opt.continuous — непрерывный профиль градиента (Риккати, шаг opt.h, по умолчанию 0.5 нм) вместо лестницы из 40 подслоёв. */
+   *  opt.continuous — непрерывный профиль градиента (Риккати, шаг opt.h, по умолчанию 0.5 нм) вместо лестницы из 40 подслоёв;
+   *  opt.back = {f, ds} — задняя сторона подложки (тогда градиент считается лестницей из 160 подслоёв: уравнение Риккати даёт только r). */
   function synthesizeClean(lam, subKey, phiTrue, d, m, delta, dRough, opt) {
     opt = opt || {};
-    const bw = opt.bw || 0, off = opt.lamOffset || 0, cont = !!(opt.continuous && delta), h = opt.h || 0.5, step = cont ? 1.0 : 0.5;
+    const back = backOn(opt.back) ? opt.back : null;
+    const bw = opt.bw || 0, off = opt.lamOffset || 0, cont = !!(opt.continuous && delta && !back), h = opt.h || 0.5, step = cont ? 1.0 : 0.5;
     const rps = (lf, Nsub) => cont ? rhoGraded(lf, Nsub, phiTrue, d, m, delta, dRough, h) : rhoStack(lf, buildLayers(lf, d, m, delta, dRough, 40), Nsub, phiTrue);
+    const ncs = (lf, Nsub) => back ? ncsBackside(lf, buildLayers(lf, d, m, delta, dRough, delta ? 160 : 1), Nsub, phiTrue, back) : ncsFromR(...rps(lf, Nsub));
     let psi, del;
     if (bw > 0) {
       const lo = lam[0] - 4 * bw - 2, hi = lam[lam.length - 1] + 4 * bw + 2;
       const nf = Math.floor((hi - lo) / step) + 1; const lf = new Array(nf); for (let i = 0; i < nf; i++) lf[i] = lo + i * step + off;
-      const [RP, RS] = rps(lf, substrateN(subKey, lf));
-      const { N, C, S } = ncsFromR(RP, RS);
+      const { N, C, S } = ncs(lf, substrateN(subKey, lf));
       const sg = bw / 2.3548, half = Math.max(1, Math.ceil(3.5 * sg / step)); const ker = []; let ks = 0;
       for (let j = -half; j <= half; j++) { const w = Math.exp(-0.5 * (j * step / sg) ** 2); ker.push(w); ks += w; }
       const conv = (y) => { const out = new Float64Array(nf); for (let i = 0; i < nf; i++) { let s = 0; for (let j = -half; j <= half; j++) { const ii = Math.min(nf - 1, Math.max(0, i + j)); s += y[ii] * ker[j + half]; } out[i] = s / ks; } return out; };
@@ -280,7 +384,8 @@
       }
     } else {
       const la = lam.map(l => l + off);
-      const r = psiDeltaFromR(...rps(la, substrateN(subKey, la))); psi = r.psi; del = r.del;
+      if (back) { const { N, C, S } = ncs(la, substrateN(subKey, la)); const r = psiDeltaFromNCS(N, C, S); psi = r.psi; del = r.del; }
+      else { const r = psiDeltaFromR(...rps(la, substrateN(subKey, la))); psi = r.psi; del = r.del; }
     }
     return { psi, del };
   }
@@ -372,7 +477,7 @@
     return (x) => {
       const P = Object.assign({}, fixedVals); free.forEach((k, i) => P[k] = x[i]);
       const m = Object.assign({}, cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak || 0 });
-      const r = modelPsiDelta(lam, Nsub, cfg.phi, P.d, m, P.delta || 0, P.dRough || 0, M || 20);
+      const r = modelPsiDelta(lam, Nsub, cfg.phi, P.d, m, P.delta || 0, P.dRough || 0, M || 20, cfg.back);
       const out = new Float64Array(2 * n);
       for (let i = 0; i < n; i++) { out[i] = (data.psi[i] - r.psi[i]) / data.sigPsi[i]; out[n + i] = wrap(data.del[i] - r.del[i]) / data.sigDel[i]; }
       return out;
@@ -634,19 +739,37 @@
     return { psi, del, dpsi, ddel };
   }
 
-  /** Невязка и аналитический якобиан для ЛМ: fn(x, needJ) → {r, J?, psi, del}; при needJ = false — только невязка (быстрый путь). */
+  /** Шаги центральных разностей для численного якобиана (только при включённой задней стороне подложки). */
+  const JAC_STEP = { d: () => 1e-3, A: (v) => 1e-4 * Math.max(1, Math.abs(v)), Auv: (v) => 1e-4 * Math.max(10, Math.abs(v)), Eg: () => 1e-5, dRough: () => 1e-4, delta: () => 2e-6, Ak: (v) => 1e-4 * Math.max(0.01, Math.abs(v)) };
+  /** Невязка и аналитический якобиан для ЛМ: fn(x, needJ) → {r, J?, psi, del}; при needJ = false — только невязка (быстрый путь).
+   *  При cfg.back (задняя сторона подложки) якобиан считается центральными разностями по невязке с некогерентной суммой пучков. */
   function makeResidJacFn(data, cfg, free, fixedVals, M) {
-    const lam = data.lam, n = lam.length, Mm = M || 40;
+    const lam = data.lam, n = lam.length, Mm = M || 40, back = backOn(cfg.back) ? cfg.back : null;
+    const evalR = (P) => {                                                    // невязка без якобиана (Эйри; с задней стороной — матричный метод + некогерентная сумма)
+      const m = Object.assign({}, cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak || 0 });
+      const layers = buildLayers(lam, P.d, m, P.delta || 0, P.dRough || 0, Mm);
+      let psi, del;
+      if (back) { const { N, C, S } = ncsBackside(lam, layers, cfg.Nsub, cfg.phi, back); ({ psi, del } = psiDeltaFromNCS(N, C, S)); }
+      else { const [RP, RS] = rhoStack(lam, layers, cfg.Nsub, cfg.phi); ({ psi, del } = psiDeltaFromR(RP, RS)); }
+      const r = new Float64Array(2 * n);
+      for (let i = 0; i < n; i++) { r[i] = (data.psi[i] - psi[i]) / data.sigPsi[i]; r[n + i] = wrap(data.del[i] - del[i]) / data.sigDel[i]; }
+      return { r, psi, del };
+    };
     return (x, needJ) => {
       const P = Object.assign({}, fixedVals); free.forEach((k, i) => P[k] = x[i]);
-      const r = new Float64Array(2 * n);
-      if (needJ === false) {
-        const m = Object.assign({}, cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak || 0 });
-        const [RP, RS] = rhoStack(lam, buildLayers(lam, P.d, m, P.delta || 0, P.dRough || 0, Mm), cfg.Nsub, cfg.phi);
-        const { psi, del } = psiDeltaFromR(RP, RS);
-        for (let i = 0; i < n; i++) { r[i] = (data.psi[i] - psi[i]) / data.sigPsi[i]; r[n + i] = wrap(data.del[i] - del[i]) / data.sigDel[i]; }
-        return { r, psi, del };
+      if (needJ === false) return evalR(P);
+      if (back) {                                                              // с задней стороной якобиан — центральные разности (аналитический есть только для r)
+        const base = evalR(P), J = free.map(() => new Float64Array(2 * n));
+        free.forEach((k, p) => {
+          const h = JAC_STEP[k] ? JAC_STEP[k](P[k]) : 1e-4 * Math.max(1, Math.abs(P[k]));
+          const lo0 = (k === 'dRough' || k === 'Ak' || k === 'Auv') ? 0 : -Infinity;             // неотрицательные параметры: у нуля — односторонняя разность
+          const Pp = Object.assign({}, P, { [k]: P[k] + h }), Pm = Object.assign({}, P, { [k]: Math.max(lo0, P[k] - h) });
+          const hh = Pp[k] - Pm[k], rp = evalR(Pp).r, rm = evalR(Pm).r;
+          for (let i = 0; i < 2 * n; i++) J[p][i] = (rp[i] - rm[i]) / hh;
+        });
+        return { r: base.r, J, psi: base.psi, del: base.del };
       }
+      const r = new Float64Array(2 * n);
       const layers = buildLayersJac(lam, P, cfg.mat, Mm);
       const { RP, RS, dRP, dRS } = rhoStackJac(lam, layers, cfg.Nsub, cfg.phi, free);
       const { psi, del, dpsi, ddel } = psiDeltaJac(RP, RS, dRP, dRS);
@@ -805,7 +928,7 @@
   /** Вектор признаков: остаток опорного фита + 8 чисел каналов якорей (Ψ в HW, разброс, |Δ| в HW и QW, RMS Ψ/Δ,
    *  перепад Ψ-остатка синие − красные якоря HW и QW — затухание контраста полос к синему краю). */
   function featureVector(dd, cfg, resid) {
-    const subDel = cfg.subDel || (cfg.subDel = modelPsiDelta(dd.lam, cfg.Nsub, cfg.phi, 0, cfg.mat, 0, 0, 1).del);
+    const subDel = cfg.subDel || (cfg.subDel = modelPsiDelta(dd.lam, cfg.Nsub, cfg.phi, 0, cfg.mat, 0, 0, 1, cfg.back).del);   // якоря — по голой подложке (с задней стороной, если она включена)
     const { HW, QW } = anchors(dd.lam, dd.del, subDel);
     let ch = { psiHW: 0, psiHWsd: 0, delHW: 0, delQW: 0, rmsPsi: 0, rmsDel: 0, psiHWtrend: 0, psiQWtrend: 0 };
     if (HW.length >= 2 && QW.length >= 1) ch = channels(dd.lam, resid, HW, QW);
@@ -815,7 +938,8 @@
   /** Случайный размер дефекта в двух шкалах: с вероятностью ½ в тонкой [lo, small], иначе в [small, max] (если max > small). */
   function twoScale(rng, lo, small, max) { small = Math.min(small, max); return (max > small + 1e-12 && rng.uniform() < 0.5) ? rng.range(small, max) : rng.range(lo, small); }
   /** Один обучающий пример: истина со случайными дефектами и мешающими факторами → опорный фит → остаток.
-   *  nuis = {deltaMax, roughMax, kMax, bw, phiErr}; kMax — верхняя граница k хвоста поглощения при 400 нм. */
+   *  nuis = {deltaMax, roughMax, kMax, bw, phiErr, backFerr}; kMax — верхняя граница k хвоста поглощения при 400 нм;
+   *  backFerr — неопределённость заданной доли задней стороны (cfg.back), в этих пределах доля истины разыгрывается случайно. */
   function trainingExample(data, cfg, prior, nuis, rng, cls) {
     const c = CLASSES[cls];
     const delta = c.g * twoScale(rng, 0.0002, 0.02, nuis.deltaMax), dRough = c.r ? rng.range(0.02, nuis.roughMax) : 0;
@@ -825,12 +949,13 @@
     if (m.Auv < 0) m.Auv = 0;
     if (k400 > 0) m.Ak = tailAk(m, k400);
     const opt = { bw: Math.max(0, nuis.bw + rng.range(-0.3, 0.3)), lamOffset: rng.range(-0.1, 0.1), driftPsi: [rng.range(-0.01, 0.01), rng.range(-0.015, 0.015)], driftDel: [rng.range(-0.03, 0.03), rng.range(-0.04, 0.04)], sigPsi: data.sigPsi, sigDel: data.sigDel };
+    if (backOn(cfg.back)) opt.back = { f: Math.min(1, Math.max(0, cfg.back.f + rng.range(-(nuis.backFerr || 0), nuis.backFerr || 0))), ds: cfg.back.ds };   // истинная доля задней стороны — в пределах её неопределённости
     const s = synthesize(data.lam, cfg.subKey, cfg.phi + rng.range(-nuis.phiErr, nuis.phiErr), d, m, delta, dRough, opt, rng);
     const dd = { lam: data.lam, psi: s.psi, del: s.del, sigPsi: data.sigPsi, sigDel: data.sigDel };
     const fit = referenceFit(dd, cfg, prior);
     return { x: featureVector(dd, cfg, fit.resid), y: cls, delta, dRough, k400, d, dFit: fit.P.d, chi2: fit.chi2 };
   }
 
-  const api = { HC, TAIL_ET, K400_MAX, N_CHANNELS, MATERIALS, SUBSTRATES, CLASSES, classIndex, filmN, filmNK, tailK400, tailAk, substrateN, buildLayers, rhoStack, psiDeltaFromR, modelPsiDelta, rhoGraded, synthesizeClean, applyNoise, synthesize, makeRng, lmFit, lmFitJac, makeResidJacFn, rhoStackJac, buildLayersJac, filmNJac, psiDeltaJac, referenceFit, finalFit, anchors, channels, featureVector, trainSoftmax, ridge, trainingExample, wrap, interp, tlEps };
+  const api = { HC, TAIL_ET, K400_MAX, N_CHANNELS, MATERIALS, SUBSTRATES, CLASSES, classIndex, filmN, filmNK, tailK400, tailAk, substrateN, buildLayers, rhoStack, psiDeltaFromR, psiDeltaFromNCS, ncsFromR, stackCoefs, ncsBackside, backOn, modelPsiDelta, rhoGraded, synthesizeClean, applyNoise, synthesize, makeRng, lmFit, lmFitJac, makeResidJacFn, rhoStackJac, buildLayersJac, filmNJac, psiDeltaJac, referenceFit, finalFit, anchors, channels, featureVector, trainSoftmax, ridge, trainingExample, wrap, interp, tlEps };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.EllipCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);

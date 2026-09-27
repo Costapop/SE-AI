@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-/* Генерация восьми встроенных тестовых образцов (examples/examples.json): пять прозрачных оксидов/нитрида
-   и три материала с поглощением на синем краю (SiNₓ:H, a-C:H, CeO₂), у которых в истине есть хвост поглощения (k400 > 0).
+/* Генерация девяти встроенных тестовых образцов (examples/examples.json): пять прозрачных оксидов/нитрида,
+   три материала с краем поглощения (SiNₓ:H, WO₃, CeO₂), у которых в истине есть хвост поглощения (k400 > 0),
+   и один образец на плоскопараллельной подложке с заданной долей отражения от задней стороны (back).
    Детерминировано: те же зёрна → те же спектры. Истина каждого образца хранится рядом со спектром
    и в приложении используется только для сверки на шаге 4. */
 const fs = require("fs"), path = require("path");
@@ -25,6 +26,10 @@ const defs = [
     truth: { d: 838.2, delta: 0.0, dRough: 1.5, k400: 2.0e-3, phiTrue: 60.02, bw: 1.2, off: 0.04, mp: { A: 1.02, Auv: 0.98, E0: 4.45, C: 1.24, Eg: 3.23 } }, seed: 707 },
   { id: "ex8", file: "08_CeO2_on_Si_65deg.xlsx", title: "CeO₂ на кремнии, 65°", mat: "ceo2", sub: "si", phi: 65.0, dNom: 900, dRange: 5, lam: grid(400, 800, 2),
     truth: { d: 887.5, delta: -0.010, dRough: 0.0, k400: 1.2e-3, phiTrue: 65.03, bw: 1.0, off: 0.05, mp: { A: 1.02, Auv: 0.98, E0: 3.94, C: 0.91, Eg: 2.79 } }, seed: 808 },
+  // задняя сторона подложки: back — заданная доля (независимое измерение) с неопределённостью, truth.back — истинная
+  { id: "ex9", file: "09_ZrO2_on_fused_silica_1mm_backside_65deg.xlsx", title: "ZrO₂ на плавленом кварце 1 мм с задней стороной, 65°", mat: "zro2", sub: "silica", phi: 65.0, dNom: 800, dRange: 5, lam: grid(400, 800, 2),
+    back: { f: 0.95, ds: 1e6, ferr: 0.02 },
+    truth: { d: 780.4, delta: -0.006, dRough: 1.0, phiTrue: 65.01, bw: 1.0, off: -0.03, back: { f: 0.96, ds: 1e6 }, mp: { A: 1.015, Auv: 1.03, E0: 5.98, C: 3.04, Eg: 4.96 } }, seed: 909 },
 ];
 const out = [];
 for (const D of defs) {
@@ -32,16 +37,18 @@ for (const D of defs) {
   const m = Object.assign({}, m0, { A: m0.A * D.truth.mp.A, Auv: m0.Auv * D.truth.mp.Auv, E0: D.truth.mp.E0, C: D.truth.mp.C, Eg: D.truth.mp.Eg });
   if (D.truth.k400) m.Ak = E.tailAk(m, D.truth.k400);                              // хвост поглощения в истине
   const rng = E.makeRng(D.seed);
-  const clean = E.synthesize(D.lam, D.sub, D.truth.phiTrue, D.truth.d, m, D.truth.delta, D.truth.dRough, { bw: D.truth.bw, lamOffset: D.truth.off }, rng);
+  const clean = E.synthesize(D.lam, D.sub, D.truth.phiTrue, D.truth.d, m, D.truth.delta, D.truth.dRough, { bw: D.truth.bw, lamOffset: D.truth.off, back: D.truth.back || null }, rng);
   const sigP = D.lam.map(sigModel), sigD = sigP.map((v, i) => 2.2 * v / Math.max(Math.sin(2 * clean.psi[i] * Math.PI / 180), 0.15));
   const s = E.synthesize(D.lam, D.sub, D.truth.phiTrue, D.truth.d, m, D.truth.delta, D.truth.dRough,
-    { bw: D.truth.bw, lamOffset: D.truth.off, driftPsi: [rng.range(-0.01, 0.01), rng.range(-0.015, 0.015)], driftDel: [rng.range(-0.03, 0.03), rng.range(-0.04, 0.04)], sigPsi: sigP, sigDel: sigD }, rng);
+    { bw: D.truth.bw, lamOffset: D.truth.off, back: D.truth.back || null, driftPsi: [rng.range(-0.01, 0.01), rng.range(-0.015, 0.015)], driftDel: [rng.range(-0.03, 0.03), rng.range(-0.04, 0.04)], sigPsi: sigP, sigDel: sigD }, rng);
   const nk = E.filmNK([450, 550, 650, 750], m);
   const truth = { d: D.truth.d, delta: D.truth.delta, dRough: D.truth.dRough, phiTrue: D.truth.phiTrue, bw: D.truth.bw, lamOffset: D.truth.off, mat: m, n: { 450: nk.n[0], 550: nk.n[1], 650: nk.n[2], 750: nk.n[3] } };
   if (D.truth.k400) { truth.k400 = D.truth.k400; truth.k = { 450: nk.k[0], 550: nk.k[1], 650: nk.k[2], 750: nk.k[3] }; }   // старые образцы без этих полей — байт в байт как раньше
-  out.push({ id: D.id, file: D.file, title: D.title, mat: D.mat, sub: D.sub, phi: D.phi, dNom: D.dNom, dRange: D.dRange, bw: D.truth.bw,
-    lam: D.lam, psi: Array.from(s.psi).map(v => +v.toFixed(4)), del: Array.from(s.del).map(v => +v.toFixed(4)), sigPsi: sigP.map(v => +v.toFixed(4)), sigDel: sigD.map(v => +v.toFixed(4)), truth });
-  console.log(D.id, D.title, "Ψ", Math.min(...s.psi).toFixed(1), "–", Math.max(...s.psi).toFixed(1), D.truth.k400 ? `k хвоста(400) = ${D.truth.k400}, k плёнки(450/550) = ${nk.k[0].toFixed(4)}/${nk.k[1].toFixed(4)}` : "");
+  if (D.truth.back) truth.back = D.truth.back;
+  const rec = { id: D.id, file: D.file, title: D.title, mat: D.mat, sub: D.sub, phi: D.phi, dNom: D.dNom, dRange: D.dRange, bw: D.truth.bw };
+  if (D.back) rec.back = D.back;
+  out.push(Object.assign(rec, { lam: D.lam, psi: Array.from(s.psi).map(v => +v.toFixed(4)), del: Array.from(s.del).map(v => +v.toFixed(4)), sigPsi: sigP.map(v => +v.toFixed(4)), sigDel: sigD.map(v => +v.toFixed(4)), truth }));
+  console.log(D.id, D.title, "Ψ", Math.min(...s.psi).toFixed(1), "–", Math.max(...s.psi).toFixed(1), D.truth.k400 ? `k хвоста(400) = ${D.truth.k400}, k плёнки(450/550) = ${nk.k[0].toFixed(4)}/${nk.k[1].toFixed(4)}` : "", D.truth.back ? `задняя сторона: истина ${D.truth.back.f}, задано ${D.back.f} ± ${D.back.ferr}` : "");
 }
 const file = path.join(__dirname, "../examples/examples.json");
 if (process.argv.includes("--check")) {

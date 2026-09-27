@@ -90,7 +90,7 @@ footer { padding: 6px 28px 24px; color: var(--muted); font-size: 12.5px; max-wid
 <body>
 <header>
   <h1>Дефекты плёнки по остатку эллипсометрического фита</h1>
-  <p>Спектр Ψ, Δ на отрезке длин волн, материал из справочника, подложка, угол и толщина — на входе. Опорный фит однородной прозрачной плёнки, ИИ-модель, обученная на смоделированных остатках, выбор наиболее вероятного набора дефектов и окончательный фит — на выходе. Дефекты: неоднородность по глубине, шероховатость поверхности и поглощение (хвост ниже края); задней стороны подложки нет. Симулятор позволяет задать любую комбинацию дефектов и параметров прибора, синтезировать «измерение» и проверить на нём всю цепочку.</p>
+  <p>Спектр Ψ, Δ на отрезке длин волн, материал из справочника, подложка, угол и толщина — на входе. Опорный фит однородной прозрачной плёнки, ИИ-модель, обученная на смоделированных остатках, выбор наиболее вероятного набора дефектов и окончательный фит — на выходе. Дефекты: неоднородность по глубине, шероховатость поверхности и поглощение (хвост ниже края). Отражение от задней стороны прозрачной подложки учитывается некогерентно с заданной (не фитируемой) долей — флажок в панели «Спектр». Симулятор позволяет задать любую комбинацию дефектов и параметров прибора, синтезировать «измерение» и проверить на нём всю цепочку.</p>
 </header>
 <div class="wrap">
 <aside>
@@ -100,6 +100,8 @@ footer { padding: 6px 28px 24px; color: var(--muted); font-size: 12.5px; max-wid
     <select id="exSel"></select>
     <label for="fileIn">Или файл .xlsx / .csv (столбцы: λ нм, Ψ, Δ, при наличии σΨ, σΔ)</label>
     <input type="file" id="fileIn" accept=".xlsx,.xls,.csv,.txt">
+    <div class="checks" style="margin:8px 0 2px"><label><input type="checkbox" id="ckBack"> в измерении есть отражение от задней стороны подложки</label></div>
+    <p class="note">Плоскопараллельная прозрачная подложка: пучки, отражённые задней гранью, складываются с передним некогерентно. Доля и толщина — в «Априорных условиях»; они же используются в симуляторе и в обучении ИИ. Для поглощающей подложки (c-Si) вклад исчезает сам.</p>
     <div id="dataInfo" class="status"></div>
   </div>
   <div class="card">
@@ -117,8 +119,16 @@ footer { padding: 6px 28px 24px; color: var(--muted); font-size: 12.5px; max-wid
       </div>
       <p class="note">В фите свободны A, A_uv, E_g и толщина; E₀, C, E_uv фиксированы. Значения справочника — типовые для аморфных плёнок.</p>
     </details>
-    <label for="subSel">Подложка (полубесконечная)</label>
+    <label for="subSel">Подложка</label>
     <select id="subSel"></select>
+    <div id="backBox">
+      <div class="row3">
+        <div><label for="backF">Доля задней стороны</label><input type="number" id="backF" step="0.01" min="0" max="1" value="1"></div>
+        <div><label for="backFerr">Её неопределённость</label><input type="number" id="backFerr" step="0.01" min="0" max="1" value="0.02"></div>
+        <div><label for="backDs">Толщина подложки, мм</label><input type="number" id="backDs" step="0.1" min="0.01" value="1.0"></div>
+      </div>
+      <p class="note" id="backNote">Задняя сторона подложки: доля отражённого задней гранью света, попадающего в детектор (0–1), задана из независимого измерения (например, по голой подложке) и в фите не варьируется; неопределённость — разброс доли в обучающей выборке; толщина нужна только для затухания в поглощающей подложке. Включается флажком в панели «Спектр».</p>
+    </div>
     <div class="row">
       <div><label for="phi">Угол падения, град</label><input type="number" id="phi" step="0.01" value="65"></div>
       <div><label for="phiErr">Его неопределённость, град</label><input type="number" id="phiErr" step="0.01" value="0.03"></div>
@@ -178,7 +188,11 @@ footer { padding: 6px 28px 24px; color: var(--muted); font-size: 12.5px; max-wid
         <div><label>дрейф Ψ (смещение), град</label><input type="number" id="simDrP" step="0.005" value="0.01"></div>
         <div><label>дрейф Δ (смещение), град</label><input type="number" id="simDrD" step="0.01" value="0.03"></div>
       </div>
-      <p class="note">σΨ(λ) = σ_красн + рост·((650 − λ)/250)² при λ &lt; 650 нм; σΔ = отношение·σΨ / max(sin 2Ψ, 0.15). Задней стороны подложки нет.</p>
+      <div class="row">
+        <div><label for="simBackF">истинная доля задней стороны</label><input type="number" id="simBackF" step="0.01" min="0" max="1" placeholder="как в априорных"></div>
+        <div id="simBackInfo" class="status" style="align-self:end;margin:0 0 7px"></div>
+      </div>
+      <p class="note">σΨ(λ) = σ_красн + рост·((650 − λ)/250)² при λ &lt; 650 нм; σΔ = отношение·σΨ / max(sin 2Ψ, 0.15). Задняя сторона подложки моделируется, если включён флажок в панели «Спектр»; при этом градиент считается лестницей из 160 подслоёв (уравнение Риккати даёт только отражение).</p>
     </details>
     <div class="btns">
       <button class="primary" id="btnSim">Сгенерировать измерение</button>
@@ -225,7 +239,7 @@ footer { padding: 6px 28px 24px; color: var(--muted); font-size: 12.5px; max-wid
 
   <section class="step" id="s2">
     <h2><span class="num">2</span>Обучение ИИ-модели на смоделированных остатках</h2>
-    <p class="lead">Для тех же условий генерируются спектры с случайными дефектами двенадцати классов (без дефектов; градиент δ&gt;0 или δ&lt;0; шероховатость; поглощение; их сочетания) и с мешающими факторами: толщина в заданном разбросе, дисперсия ±5 %, ошибка угла, полоса, сдвиг шкалы λ, дрейф, шум по σ из файла. Каждый пример фитируется той же однородной прозрачной моделью; на его остатке и учится логистическая регрессия. У поглощения своя сигнатура: не сдвиг Ψ в полуволновых точках, как у градиента, а затухание контраста полос, растущее к синему краю.</p>
+    <p class="lead">Для тех же условий генерируются спектры с случайными дефектами двенадцати классов (без дефектов; градиент δ&gt;0 или δ&lt;0; шероховатость; поглощение; их сочетания) и с мешающими факторами: толщина в заданном разбросе, дисперсия ±5 %, ошибка угла, полоса, сдвиг шкалы λ, дрейф, шум по σ из файла. Если включена задняя сторона подложки, её доля в каждом примере разыгрывается в пределах заданной неопределённости, а фит использует заданную долю. Каждый пример фитируется той же однородной прозрачной моделью; на его остатке и учится логистическая регрессия. У поглощения своя сигнатура: не сдвиг Ψ в полуволновых точках, как у градиента, а затухание контраста полос, растущее к синему краю.</p>
     <div class="bar"><div id="trainBar"></div></div>
     <div id="trainOut" class="empty">Сначала опорный фит.</div>
   </section>
@@ -255,7 +269,7 @@ footer { padding: 6px 28px 24px; color: var(--muted); font-size: 12.5px; max-wid
   </section>
 </main>
 </div>
-<footer>Физика: коэффициенты Френеля и формула Эйри для стопки слоёв, конвенция N = n − ik, Δ по Аззаму–Башаре; дисперсия Тауца–Лоренца (Jellison–Modine) с УФ-полюсом; шероховатость — эффективная среда Бруггемана; неоднородность — линейный профиль n(z) = n·[1 + δ(z/d − ½)], δ &gt; 0 означает рост n к поверхности; поглощение — причинный (КК-согласованный) хвост ниже края: второй осциллятор Тауца–Лоренца с порогом E_t = 1.2 эВ, k растёт к синему краю. Подложки: BK7 (Schott), плавленый кварц (Malitson), кремний (табличные n, k). ИИ: мультиномиальная логистическая регрессия на остатке и якорных каналах, гребневая регрессия для размеров. Все вычисления идут в браузере.</footer>
+<footer>Физика: коэффициенты Френеля и формула Эйри для стопки слоёв, конвенция N = n − ik, Δ по Аззаму–Башаре; дисперсия Тауца–Лоренца (Jellison–Modine) с УФ-полюсом; шероховатость — эффективная среда Бруггемана; неоднородность — линейный профиль n(z) = n·[1 + δ(z/d − ½)], δ &gt; 0 означает рост n к поверхности; поглощение — причинный (КК-согласованный) хвост ниже края: второй осциллятор Тауца–Лоренца с порогом E_t = 1.2 эВ, k растёт к синему краю. Подложки: BK7 (Schott), плавленый кварц (Malitson), кремний (табличные n, k); задняя сторона — некогерентное сложение матриц Мюллера пучков (матричный метод Абелеса для r, t, r′, t′), доля задана. ИИ: мультиномиальная логистическая регрессия на остатке и якорных каналах, гребневая регрессия для размеров. Все вычисления идут в браузере.</footer>
 
 <script>
 /*__CORE__*/
@@ -286,21 +300,37 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   $('nTrain').addEventListener('input', () => $('nTrainVal').textContent = $('nTrain').value);
 
   // ---------------------------------------------------------------- данные
-  function setData(d, example) {
-    S.data = d; S.example = example || null; S.ref = S.train = S.probs = S.fin = null;
-    $('dataInfo').textContent = `${d.lam.length} точек, ${fmt(d.lam[0], 0)}–${fmt(d.lam[d.lam.length - 1], 0)} нм` + (d.hasSigma ? ', σ из файла' : ', σ по умолчанию');
-    $('btn1').disabled = false; $('btn2').disabled = true; $('btn3').disabled = true; $('btn4').disabled = true;
+  /** Сброс панелей и состояния шагов 1–4 (новый спектр или смена модели измерения). */
+  function resetSteps() {
+    S.ref = S.train = S.probs = S.fin = null; S.refFeat = null; S.est = null; S.aiFlags = null; S.finFlags = null;
+    $('btn1').disabled = !S.data; $('btn2').disabled = true; $('btn3').disabled = true; $('btn4').disabled = true;
     ['refOut', 'trainOut', 'diagOut', 'finOut'].forEach(id => { $(id).className = 'empty'; });
     $('refOut').textContent = 'Нажмите «Опорный фит».'; $('trainOut').textContent = 'Сначала опорный фит.'; $('diagOut').textContent = 'Сначала обучение.'; $('finOut').textContent = 'Сначала диагноз.';
     $('modelChoice').style.display = 'none'; $('truthOut').innerHTML = ''; $('causeOut').innerHTML = ''; $('chanOut').textContent = ''; $('trainBar').style.width = '0%';
     ['chRes', 'chResFin', 'chFinger', 'chN'].forEach(destroyChart);
+  }
+  function backInfoText() { return $('ckBack').checked ? `, задняя сторона подложки: доля ${fmt(+$('backF').value, 2)}` : ', задней стороны нет'; }
+  function setData(d, example) {
+    S.data = d; S.example = example || null;
+    resetSteps();
+    $('dataInfo').textContent = `${d.lam.length} точек, ${fmt(d.lam[0], 0)}–${fmt(d.lam[d.lam.length - 1], 0)} нм` + (d.hasSigma ? ', σ из файла' : ', σ по умолчанию') + backInfoText();
     drawSpectrum();
     $('specNote').textContent = example ? `Образец «${example.title}». Истинные параметры скрыты до окончательного фита.` : 'Файл пользователя.';
     $('btnCsv').disabled = false;
   }
+  // смена модели измерения (задняя сторона) обесценивает опорный фит и обучение — панели сбрасываются
+  function onBackToggle() {
+    const on = $('ckBack').checked; ['backF', 'backFerr', 'backDs', 'simBackF'].forEach(id => { $(id).disabled = !on; });
+    $('backBox').style.opacity = on ? '1' : '0.55'; updateSimBackInfo();
+    if (S.data) { resetSteps(); drawSpectrum(); $('dataInfo').textContent = $('dataInfo').textContent.replace(/, задн.*$/, '') + backInfoText(); }
+  }
+  $('ckBack').addEventListener('change', onBackToggle);
+  ['backF', 'backDs'].forEach(id => $(id).addEventListener('change', () => { if (S.data && $('ckBack').checked) { resetSteps(); $('dataInfo').textContent = $('dataInfo').textContent.replace(/, задн.*$/, '') + backInfoText(); } }));
   exSel.addEventListener('change', () => {
     const e = EXAMPLES[+exSel.value]; if (!e) return;
     matSel.value = e.mat; fillMat(e.mat); subSel.value = e.sub; $('phi').value = e.phi; $('dNom').value = e.dNom; $('dRange').value = e.dRange; $('bw').value = e.bw;
+    $('ckBack').checked = !!(e.back && e.back.f > 0); if (e.back) { $('backF').value = e.back.f; $('backDs').value = (e.back.ds / 1e6).toFixed(2); if (e.back.ferr !== undefined) $('backFerr').value = e.back.ferr; }
+    $('simBackF').value = ''; onBackToggle();
     setData({ lam: e.lam.slice(), psi: e.psi.slice(), del: e.del.slice(), sigPsi: e.sigPsi.slice(), sigDel: e.sigDel.slice(), hasSigma: true }, e);
   });
   $('fileIn').addEventListener('change', async (ev) => {
@@ -333,10 +363,12 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   function readCfg() {
     const mat = { A: +$('mA').value, E0: +$('mE0').value, C: +$('mC').value, Eg: +$('mEg').value, Auv: +$('mAuv').value, Euv: +$('mEuv').value, name: E.MATERIALS[matSel.value].name };
     const subKey = subSel.value, phi = +$('phi').value, dNom = +$('dNom').value, rng = +$('dRange').value / 100;
-    S.cfg = { mat, subKey, Nsub: E.substrateN(subKey, S.data.lam), phi, subDel: null };
+    S.cfg = { mat, subKey, Nsub: E.substrateN(subKey, S.data.lam), phi, subDel: null, back: readBack() };
     S.prior = { dMin: dNom * (1 - rng), dMax: dNom * (1 + rng) };
-    S.nuis = { deltaMax: Math.min(0.20, Math.max(0.005, (+$('deltaMax').value || 5) / 100)), roughMax: 3.0, kMax: Math.min(E.K400_MAX, Math.max(2e-4, (+$('kMax').value || 5) / 1000)), bw: +$('bw').value || 0, phiErr: +$('phiErr').value || 0 };
+    S.nuis = { deltaMax: Math.min(0.20, Math.max(0.005, (+$('deltaMax').value || 5) / 100)), roughMax: 3.0, kMax: Math.min(E.K400_MAX, Math.max(2e-4, (+$('kMax').value || 5) / 1000)), bw: +$('bw').value || 0, phiErr: +$('phiErr').value || 0, backFerr: Math.min(1, Math.max(0, +$('backFerr').value || 0)) };
   }
+  /** Заданная (априорная) задняя сторона подложки: {f, ds (нм)} или null, если флажок в панели «Спектр» снят. */
+  function readBack() { if (!$('ckBack').checked) return null; return { f: Math.min(1, Math.max(0, +$('backF').value || 0)), ds: Math.max(0.01, +$('backDs').value || 1) * 1e6 }; }
 
   // ---------------------------------------------------------------- графики
   function destroyChart(id) { if (S.charts[id]) { S.charts[id].destroy(); delete S.charts[id]; } }
@@ -387,7 +419,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
 
   // ---------------------------------------------------------------- шаг 1
   const matOf = (P) => Object.assign({}, S.cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak || 0 });
-  function modelCurves(P) { return E.modelPsiDelta(S.data.lam, S.cfg.Nsub, S.cfg.phi, P.d, matOf(P), P.delta || 0, P.dRough || 0, 20); }
+  function modelCurves(P) { return E.modelPsiDelta(S.data.lam, S.cfg.Nsub, S.cfg.phi, P.d, matOf(P), P.delta || 0, P.dRough || 0, 20, S.cfg.back); }
   function step1() {
     if (!S.data) return; clearFrom(1); readCfg();
     const t = performance.now(); const ref = E.referenceFit(S.data, S.cfg, S.prior); S.ref = ref; const ms = performance.now() - t;
@@ -479,7 +511,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     for (const l of [450, 550, 650, 750]) if (l >= S.data.lam[0] && l <= S.data.lam[S.data.lam.length - 1]) rows.push([`n(${l} нм)`, fmt(nAt(mFin, l), 4), `опорный: ${fmt(nAt(mRef, l), 4)}`]);
     const n = S.data.lam.length, rp = Array.from(fin.resid.slice(0, n)), rd = Array.from(fin.resid.slice(n)); const rms = a => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
     $('finOut').className = ''; $('finOut').innerHTML = `<table><tr><th>параметр</th><th>окончательный фит</th><th>примечание</th></tr>${rows.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td class="note">${r[2]}</td></tr>`).join('')}</table>
-      <p class="note">${veto.length ? veto.join('; ') + '. ' : ''}RMS остатка после фита: Ψ ${fmt(rms(rp), 2)} σ, Δ ${fmt(rms(rd), 2)} σ; ${fin.chi2 < 2.5 ? 'остаток на уровне шума — модель закрыта.' : 'остаток выше шума: остаются неучтённые факторы (полоса, ошибка угла, дисперсия вне справочной формы) — параметры дефектов при этом обычно уже верны, но их погрешности заниженны.'} Погрешности — формальные, из аналитического якобиана; систематика (угол, полоса, шкала λ) в них не входит. Стартов ${fin.starts || 1}, время фита ${fmt(ms, 0)} мс.</p>`;
+      <p class="note">${veto.length ? veto.join('; ') + '. ' : ''}RMS остатка после фита: Ψ ${fmt(rms(rp), 2)} σ, Δ ${fmt(rms(rd), 2)} σ; ${fin.chi2 < 2.5 ? 'остаток на уровне шума — модель закрыта.' : 'остаток выше шума: остаются неучтённые факторы (полоса, ошибка угла, дисперсия вне справочной формы) — параметры дефектов при этом обычно уже верны, но их погрешности заниженны.'} Погрешности — формальные, из ${S.cfg.back ? 'численного якобиана (с задней стороной подложки)' : 'аналитического якобиана'}; систематика (угол, полоса, шкала λ${S.cfg.back ? ', доля задней стороны' : ''}) в них не входит. Стартов ${fin.starts || 1}, время фита ${fmt(ms, 0)} мс.</p>`;
     if (S.example) {
       const T = S.example.truth, tk = T.k400 || 0; const cT = E.classIndex(Math.sign(T.delta), T.dRough > 0 ? 1 : 0, tk > 0 ? 1 : 0);
       const bestCls = E.classIndex(flags.grad ? Math.sign(fin.P.delta) : 0, flags.rough ? 1 : 0, flags.abs ? 1 : 0);
@@ -487,7 +519,9 @@ const EXAMPLES = /*__EXAMPLES__*/[];
       const rowsT = [['Набор дефектов', E.CLASSES[cT].name, bestCls === cT ? '<span class="tag ok">совпадает</span>' : '<span class="tag bad">не совпадает</span>'], ['d, нм', fmt(T.d, 2), `ошибка ${fmt(fin.P.d - T.d, 2)} нм`],
         ['δ, %', fmt(100 * T.delta, 2), `найдено ${flags.grad ? fmt(100 * fin.P.delta, 3) : '0 (не включён)'}`], ['EMA-слой, нм', fmt(T.dRough, 2), `найдено ${flags.rough ? fmt(fin.P.dRough, 3) : '0 (не включён)'}`],
         ['Поглощение: k хвоста при 400 нм', fmtK(tk), `найдено ${flags.abs ? fmtK(fin.P.k400) : '0 (не включено)'}`],
-        ['n(550 нм)', fmt(nAt(T.mat, 550), 4), `найдено ${fmt(nAt(mFin, 550), 4)}`], ['Фактический угол, град', fmt(T.phiTrue, 2), `в анализе ${fmt(S.cfg.phi, 2)}`], ['Полоса, нм; сдвиг шкалы λ, нм', `${T.bw}; ${T.lamOffset}`, 'в модели фита не учитываются'], ['Профиль градиента в истине', T.delta ? (T.continuous ? 'непрерывный (Риккати)' : 'лестница, 40 подслоёв') : '—', T.delta ? 'в фите — лестница из 40 подслоёв (80 при |δ| > 4 %)' : '']];
+        ['n(550 нм)', fmt(nAt(T.mat, 550), 4), `найдено ${fmt(nAt(mFin, 550), 4)}`], ['Фактический угол, град', fmt(T.phiTrue, 2), `в анализе ${fmt(S.cfg.phi, 2)}`], ['Полоса, нм; сдвиг шкалы λ, нм', `${T.bw}; ${T.lamOffset}`, 'в модели фита не учитываются'],
+        ['Задняя сторона подложки, доля', T.back ? fmt(T.back.f, 3) : 'нет', S.cfg.back ? `в модели ${fmt(S.cfg.back.f, 3)} (задана, не фитируется)` : 'в модели выключена'],
+        ['Профиль градиента в истине', T.delta ? (T.continuous ? 'непрерывный (Риккати)' : (T.back ? 'лестница, 160 подслоёв' : 'лестница, 40 подслоёв')) : '—', T.delta ? 'в фите — лестница из 40 подслоёв (80 при |δ| > 4 %)' : '']];
       $('truthOut').innerHTML = `<h3>Проверка по скрытой истине образца</h3><table><tr><th>параметр</th><th>истина</th><th>сравнение</th></tr>${rowsT.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</table>`;
       $('causeOut').innerHTML = '<div class="status">Анализ причин отклонения…</div>';
       setTimeout(causeAnalysis, 30);
@@ -529,11 +563,16 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     if (Math.abs(dev.d) > 20) F.push(`Толщина ошибочна на ${fmt(dev.d, 0)} нм — это порядок полосы (λ/2n), а не точность фита: неверный порядок интерференции или толщина вне разброса.`);
     if (Math.abs(T.phiTrue - S.cfg.phi) > S.nuis.phiErr + 1e-9) F.push(`Фактический угол отличается от номинала на ${fmt(T.phiTrue - S.cfg.phi, 3)}°, больше заявленной неопределённости ±${S.nuis.phiErr}°: ошибка угла сдвигает линию подложки и имитирует градиент (≈0.3 % на 0.1° при 60–65°), поэтому ИИ обучался на остатках другого прибора. Лекарство — калибровка угла по подложке-свидетелю или второй угол.`);
     if (Math.abs(T.bw - S.nuis.bw) > 0.3) F.push(`Полоса прибора в истине ${T.bw} нм, а в генераторе обучения ${S.nuis.bw} нм: обучающие остатки моделировали другой прибор.`);
+    if (T.back && !S.cfg.back) F.push(`В измерении есть отражение от задней стороны подложки (доля ${fmt(T.back.f, 2)}), а в модели оно выключено: без него однородная плёнка не описывает спектр (Ψ отличается на градусы), и ИИ, и фит приписывают разницу дефектам. Включите флажок в панели «Спектр».`);
+    if (!T.back && S.cfg.back) F.push(`В модели включена задняя сторона подложки (доля ${fmt(S.cfg.back.f, 2)}), а в измерении её нет — та же ошибка с обратным знаком.`);
+    if (T.back && S.cfg.back && Math.abs(T.back.f - S.cfg.back.f) > S.nuis.backFerr + 1e-9) F.push(`Истинная доля задней стороны ${fmt(T.back.f, 3)} отличается от заданной ${fmt(S.cfg.back.f, 3)} больше заявленной неопределённости ±${S.nuis.backFerr}: доля не фитируется, и её ошибка целиком уходит в остаток (см. строку бюджета).`);
     // --- бюджет: последовательное устранение факторов при верном наборе дефектов
     const p0 = Object.assign({}, S.ref.P, { d: T.d, dRough: T.dRough || 0.5, delta: T.delta || 0, Ak: T.mat.Ak || 0 });
-    const mk = (opt) => { const sy = E.synthesize(lam, S.cfg.subKey, T.phiTrue, T.d, T.mat, T.delta, T.dRough, Object.assign({ continuous: !!T.continuous }, opt), E.makeRng(1)); return { lam, psi: Array.from(sy.psi), del: Array.from(sy.del), sigPsi: S.data.sigPsi, sigDel: S.data.sigDel }; };
+    const mk = (opt) => { const sy = E.synthesize(lam, S.cfg.subKey, T.phiTrue, T.d, T.mat, T.delta, T.dRough, Object.assign({ continuous: !!T.continuous, back: T.back || null }, opt), E.makeRng(1)); return { lam, psi: Array.from(sy.psi), del: Array.from(sy.del), sigPsi: S.data.sigPsi, sigDel: S.data.sigDel }; };
     const cfg0 = S.cfg, cfgA = Object.assign({}, S.cfg, { phi: T.phiTrue, subDel: null });
-    const cfgAD = Object.assign({}, cfgA, { mat: Object.assign({}, S.cfg.mat, { E0: T.mat.E0, C: T.mat.C, Euv: T.mat.Euv }) });
+    const backDiff = !!(T.back && S.cfg.back && Math.abs(T.back.f - S.cfg.back.f) > 1e-9) || (!!T.back !== !!S.cfg.back);
+    const cfgAB = backDiff ? Object.assign({}, cfgA, { back: T.back || null, subDel: null }) : cfgA;
+    const cfgAD = Object.assign({}, cfgAB, { mat: Object.assign({}, S.cfg.mat, { E0: T.mat.E0, C: T.mat.C, Euv: T.mat.Euv }) });
     const fitRow = (label, data, cfg) => { const r = E.finalFit(data, cfg, S.prior, trueFlags, p0); const m = Object.assign({}, cfg.mat, { A: r.P.A, Auv: r.P.Auv, Eg: r.P.Eg, Ak: r.P.Ak || 0 }); return { label, d: r.P.d, delta: trueFlags.grad ? r.P.delta : 0, rough: trueFlags.rough ? r.P.dRough : 0, k: trueFlags.abs ? r.P.k400 : 0, n: nAt(m, 550), chi2: r.chi2 }; };
     const rows = [{ label: 'измеренный спектр, модель по выбору ИИ (как есть)', d: fin.P.d, delta: flags.grad ? fin.P.delta : 0, rough: flags.rough ? fin.P.dRough : 0, k: flags.abs ? fin.P.k400 : 0, n: nAt(mFin, 550), chi2: fin.chi2 }];
     if (!classOK) rows.push(fitRow('измеренный спектр, верный набор дефектов', S.data, cfg0));
@@ -543,6 +582,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     rows.push(fitRow('+ без сдвига шкалы λ', mk({ bw: T.bw, lamOffset: 0 }), cfg0));
     rows.push(fitRow('+ без спектральной полосы', mk({ bw: 0, lamOffset: 0 }), cfg0));
     rows.push(fitRow('+ угол известен точно', mk({ bw: 0, lamOffset: 0 }), cfgA));
+    if (backDiff) rows.push(fitRow('+ доля задней стороны как у образца', mk({ bw: 0, lamOffset: 0 }), cfgAB));
     rows.push(fitRow('+ E₀, C, E_uv как у образца (остаётся только численная точность)', mk({ bw: 0, lamOffset: 0 }), cfgAD));
     const truthRow = { label: 'истина', d: T.d, delta: T.delta, rough: T.dRough, k: tk, n: nAt(T.mat, 550), chi2: NaN };
     // вклад каждого фактора = изменение параметров при его устранении
@@ -585,24 +625,32 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     if (k400 > 0) mTrue.Ak = E.tailAk(mTrue, k400);
     const phiTrue = phiNom + (+$('simDphi').value || 0), bw = Math.max(0, +$('simBw').value || 0), off = +$('simOff').value || 0;
     const rng = E.makeRng((+$('simSeed').value || 1) >>> 0);
-    const cont = $('simCont').checked && delta !== 0;
-    const clean = E.synthesizeClean(lam, subKey, phiTrue, d, mTrue, delta, dRough, { bw, lamOffset: off, continuous: cont });
+    const backPrior = readBack(), backTrue = backPrior ? { f: $('simBackF').value === '' ? backPrior.f : Math.min(1, Math.max(0, +$('simBackF').value || 0)), ds: backPrior.ds } : null;
+    const cont = $('simCont').checked && delta !== 0 && !backTrue;
+    const clean = E.synthesizeClean(lam, subKey, phiTrue, d, mTrue, delta, dRough, { bw, lamOffset: off, continuous: cont, back: backTrue });
     const sB = +$('simSig').value || 0.015, sG = +$('simSigBlue').value || 0, ratio = +$('simSigRatio').value || 2.2;
     const sigPsi = lam.map(l => sB + sG * Math.max(0, (650 - l) / 250) ** 2);
     const sigDel = sigPsi.map((v, i) => ratio * v / Math.max(Math.sin(2 * clean.psi[i] * Math.PI / 180), 0.15));
     const drP = +$('simDrP').value || 0, drD = +$('simDrD').value || 0;
     const driftPsi = [drP, rng.range(-1, 1) * drP], driftDel = [drD, rng.range(-1, 1) * drD];
     const s = E.applyNoise(clean, lam, { driftPsi, driftDel, sigPsi, sigDel }, rng);
-    const title = `симуляция: ${E.MATERIALS[matKey].name} на ${E.SUBSTRATES[subKey].name.split(' (')[0]}, ${phiNom}°`;
-    const example = { title, truth: { d, delta, dRough, k400, phiTrue, bw, lamOffset: off, mat: mTrue, driftPsi, driftDel, continuous: cont } };
+    const title = `симуляция: ${E.MATERIALS[matKey].name} на ${E.SUBSTRATES[subKey].name.split(' (')[0]}, ${phiNom}°` + (backTrue ? `, задняя сторона ${fmt(backTrue.f, 2)}` : '');
+    const example = { title, truth: { d, delta, dRough, k400, phiTrue, bw, lamOffset: off, mat: mTrue, driftPsi, driftDel, continuous: cont, back: backTrue } };
     exSel.value = '';
     setData({ lam, psi: Array.from(s.psi), del: Array.from(s.del), sigPsi, sigDel, hasSigma: true }, example);
     const dNom = +$('dNom').value, rg = +$('dRange').value / 100;
     const inRange = d >= dNom * (1 - rg) && d <= dNom * (1 + rg);
     const kNote = k400 > 0 ? (() => { const nk = E.filmNK([lam[0], 550], mTrue), nk0 = E.filmNK([lam[0], 550], Object.assign({}, mTrue, { Ak: 0 })); return ` Хвост поглощения: k(${lam[0]} нм) = ${fmt(nk.k[0], 4)} (без хвоста ${fmt(nk0.k[0], 4)}), k(550) = ${fmt(nk.k[1], 5)}; множитель контраста полос на синем краю от хвоста ≈ ${fmt(Math.exp(-4 * Math.PI * (nk.k[0] - nk0.k[0]) * d / lam[0]), 3)} (exp(−4πk·d/λ) за двойной проход).`; })() : '';
-    $('simStatus').textContent = `Сгенерировано ${lam.length} точек. ` + (inRange ? 'Истинная толщина внутри априорного разброса.' : 'Внимание: истинная толщина вне априорного разброса — опорный фит её не найдёт; поправьте номинал или разброс.') + kNote;
+    const backNote = backTrue ? ` Задняя сторона подложки: истинная доля ${fmt(backTrue.f, 2)} (в модели ${fmt(backPrior.f, 2)}), толщина ${fmt(backPrior.ds / 1e6, 2)} мм${cont === false && delta !== 0 ? '; градиент — лестница из 160 подслоёв' : ''}.` : '';
+    $('simStatus').textContent = `Сгенерировано ${lam.length} точек. ` + (inRange ? 'Истинная толщина внутри априорного разброса.' : 'Внимание: истинная толщина вне априорного разброса — опорный фит её не найдёт; поправьте номинал или разброс.') + kNote + backNote;
     $('btnCsv').disabled = false;
   }
+  // подсказка к полю истинной доли задней стороны
+  function updateSimBackInfo() {
+    const el = $('simBackInfo'); if (!$('ckBack').checked) { el.textContent = 'задняя сторона выключена'; return; }
+    const v = $('simBackF').value; el.textContent = v === '' ? `как в априорных: ${fmt(+$('backF').value, 2)}` : `в модели фита: ${fmt(+$('backF').value, 2)}`;
+  }
+  ['simBackF', 'backF'].forEach(id => $(id).addEventListener('input', updateSimBackInfo)); updateSimBackInfo();
   // подсказка рядом с полем поглощения: чему соответствует введённое k₄₀₀ при текущем материале
   function updateSimKInfo() {
     const k400 = Math.max(0, (+$('simK').value || 0) / 1000), el = $('simKInfo');
@@ -645,6 +693,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     ratio: 'M5 12h14 M12 6h.01 M12 18h.01',
     shift: 'M4 12h16 M14 6l6 6-6 6',
     drift: 'M3 17l6-6 4 4 8-8 M15 7h6v6',
+    backside: 'M3 8h18 M3 16h18 M7 4l4 4-4 4 M17 12l-4 4 4 4',
   };
   const FIELD_HELP = {
     matSel: ['material', 'Материал плёнки из справочника: задаёт стартовую дисперсию (Тауц–Лоренц + УФ-полюс) для фита и базовые параметры истины в симуляторе. Материал должен быть прозрачен или слабо поглощать в диапазоне измерения; SiNₓ:H, CeO₂ и WO₃ имеют край поглощения на синем краю (параметры подобраны по литературным n, k). Для материалов с E_g ниже ≈ 2 эВ дефект «поглощение» неотличим от собственного края.'],
@@ -654,7 +703,11 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     mEg: ['edge', 'Край поглощения по Тауцу E_g, эВ: ниже него ε₂ = 0, плёнка прозрачна. В фите свободна; должно быть E_g < E₀.'],
     mAuv: ['dispersion', 'Сила УФ-полюса Зельмейера, эВ²: заменяет переходы выше измеряемого диапазона, добавляет к n без поглощения. В фите свободна, ≥ 0.'],
     mEuv: ['dispersion', 'Энергия УФ-полюса E_uv, эВ (обычно 11–16 эВ). В фите фиксирована.'],
-    subSel: ['substrate', 'Подложка, полубесконечная (отражение от задней стороны не учитывается): её n(λ), k(λ) берутся из формул или таблицы и в фите не варьируются.'],
+    subSel: ['substrate', 'Подложка: её n(λ), k(λ) берутся из формул или таблицы и в фите не варьируются. Без флажка в панели «Спектр» подложка полубесконечная; с флажком отражение от её задней грани складывается некогерентно с заданной долей.'],
+    backF: ['backside', 'Доля света, отражённого задней гранью подложки и попавшего в детектор (0 — нет, 1 — плоскопараллельная подложка, весь пучок собран). Задана из независимого измерения (например, по голой подложке) и в фите не варьируется. Пучки задней стороны складываются с передним некогерентно (суммируются матрицы Мюллера), поэтому Ψ, Δ становятся «эффективными», а образец — частично деполяризующим.'],
+    backFerr: ['pm', 'Неопределённость заданной доли: в обучающей выборке истинная доля каждого примера разыгрывается равномерно в этих пределах, а фит использует заданную; так ИИ учится не принимать ошибку доли за дефект.'],
+    backDs: ['thickness', 'Толщина подложки, мм: нужна только для затухания пучка в поглощающей подложке (для стекла и кварца k = 0 — не влияет; для c-Si 0.5 мм вклад задней стороны ≈ 0).'],
+    simBackF: ['backside', 'Истинная доля задней стороны в симуляторе. Пусто — совпадает с заданной в «Априорных условиях»; иначе имитирует ошибку независимого измерения доли. Действует только при включённом флажке в панели «Спектр».'],
     phi: ['angle', 'Номинальный угол падения, градусы: используется во всех фитах как точное значение. В симуляторе к нему добавляется «ошибка угла».'],
     phiErr: ['pm', 'Заявленная неопределённость угла, градусы: полуширина случайного разброса угла при генерации обучающих остатков (в фите угол не варьируется). Ошибка угла имитирует градиент: ≈0.3 % на 0.1° при 60–65°.'],
     dNom: ['thickness', 'Номинальная толщина плёнки, нм — центр априорного интервала, в котором перебирается порядок интерференционных полос и генерируется обучающая выборка.'],

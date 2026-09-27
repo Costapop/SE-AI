@@ -6,16 +6,17 @@ const fk = (k) => (1000 * k).toFixed(2) + "·10⁻³";
 for (const e of ex) {
   if (only && !only.includes(e.id)) continue;
   const lam = e.lam, data = { lam, psi: e.psi, del: e.del, sigPsi: e.sigPsi, sigDel: e.sigDel };
-  const cfg = { mat: E.MATERIALS[e.mat], subKey: e.sub, Nsub: E.substrateN(e.sub, lam), phi: e.phi };
+  const back = e.back ? { f: e.back.f, ds: e.back.ds } : null;                       // заданная доля задней стороны (не фитируется)
+  const cfg = { mat: E.MATERIALS[e.mat], subKey: e.sub, Nsub: E.substrateN(e.sub, lam), phi: e.phi, back };
   const prior = { dMin: e.dNom * (1 - e.dRange / 100), dMax: e.dNom * (1 + e.dRange / 100) };
   let t = Date.now();
   const rf = E.referenceFit(data, cfg, prior);
   const tRef = Date.now() - t;
-  const subDel = E.modelPsiDelta(lam, cfg.Nsub, cfg.phi, 0, cfg.mat, 0, 0, 1).del;
+  const subDel = E.modelPsiDelta(lam, cfg.Nsub, cfg.phi, 0, cfg.mat, 0, 0, 1, back).del;
   const { HW, QW } = E.anchors(lam, data.del, subDel); const ch = E.channels(lam, rf.resid, HW, QW);
   const rng = E.makeRng(77); const X = [], y = [], sz = [];
   t = Date.now();
-  for (let i = 0; i < NTR; i++) { const s = E.trainingExample(data, cfg, prior, { deltaMax: 0.05, roughMax: 3, kMax: 5e-3, bw: e.bw, phiErr: 0.03 }, rng, i % K); X.push(s.x); y.push(s.y); sz.push([s.delta, s.dRough, s.k400]); }
+  for (let i = 0; i < NTR; i++) { const s = E.trainingExample(data, cfg, prior, { deltaMax: 0.05, roughMax: 3, kMax: 5e-3, bw: e.bw, phiErr: 0.03, backFerr: e.back ? e.back.ferr : 0 }, rng, i % K); X.push(s.x); y.push(s.y); sz.push([s.delta, s.dRough, s.k400]); }
   const tGen = Date.now() - t;
   const idx = X.map((_, i) => i); for (let i = idx.length - 1; i > 0; i--) { const j = rng.int(i + 1); [idx[i], idx[j]] = [idx[j], idx[i]]; }
   const nte = Math.floor(NTR / 4), te = idx.slice(0, nte), tr = idx.slice(nte);
@@ -43,7 +44,7 @@ for (const e of ex) {
   const finCls = E.classIndex(flags.grad ? Math.sign(ff.P.delta) : 0, flags.rough ? 1 : 0, flags.abs ? 1 : 0);
   if (finCls !== trueCls) wrong++;
   const top = probs.map((p, i) => [p, i]).sort((a, b) => b[0] - a[0]).slice(0, 4);
-  console.log(`\n${e.title}: опорный фит ${tRef} мс, χ²/ν = ${rf.chi2.toFixed(1)}, d = ${rf.P.d.toFixed(1)}; каналы Ψ_HW ${ch.psiHW.toFixed(1)}σ, |Δ|_HW ${ch.delHW.toFixed(1)}σ, |Δ|_QW ${ch.delQW.toFixed(1)}σ, перепад Ψ синие−красные якоря HW ${ch.psiHWtrend.toFixed(1)}σ / QW ${ch.psiQWtrend.toFixed(1)}σ (якорей ${ch.nHW})`);
+  console.log(`\n${e.title}${back ? ` [задняя сторона: задано ${back.f}, истина ${T.back.f}]` : ""}: опорный фит ${tRef} мс, χ²/ν = ${rf.chi2.toFixed(1)}, d = ${rf.P.d.toFixed(1)}; каналы Ψ_HW ${ch.psiHW.toFixed(1)}σ, |Δ|_HW ${ch.delHW.toFixed(1)}σ, |Δ|_QW ${ch.delQW.toFixed(1)}σ, перепад Ψ синие−красные якоря HW ${ch.psiHWtrend.toFixed(1)}σ / QW ${ch.psiQWtrend.toFixed(1)}σ (якорей ${ch.nHW})`);
   console.log(`   обучение: ${NTR} примеров (${K} классов) за ${(tGen / 1000).toFixed(0)} с, точность на отложенных ${(100 * acc / nte).toFixed(1)} %`);
   console.log(`   вероятности (4 лучших): ${top.map(([p, i]) => E.CLASSES[i].name + " " + (100 * p).toFixed(1) + "%").join("; ")}`);
   console.log(`   выбрано ИИ: «${cls.name}» ${k === trueCls ? "✓ верно" : "✗ (истина: " + E.CLASSES[trueCls].name + ")"}; ridge: δ ${rd.predict(xr).toFixed(2)} %, EMA ${rr.predict(xr).toFixed(2)} нм, k₄₀₀ ${fk(kEst)}`);

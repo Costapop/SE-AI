@@ -5,7 +5,8 @@
    4) уравнение Риккати для локальной функции отражения (1.1.19, 1.1.20): непрерывный градиент n(z) против лестницы подслоёв;
    5) закон сохранения энергии R + T = 1 для непоглощающей системы;
    6) аналитический якобиан (разд. 1.4.1) против конечных разностей, включая силу хвоста поглощения A_k;
-   7) хвост поглощения: численная проверка Крамерса–Кронига и монотонный рост k к синему краю.
+   7) хвост поглощения: численная проверка Крамерса–Кронига и монотонный рост k к синему краю;
+   8) задняя сторона подложки: r′, t′ обращённой стопки, классическая некогерентная сумма для пластины, предел f → 0, численный якобиан.
    Запуск: node test/verify_book.js */
 const E = require("../src/ellip_core.js");
 const PI = Math.PI;
@@ -248,6 +249,54 @@ console.log("\n6. Хвост поглощения (второй осциллят
   check(Math.abs(kt[0] - 1e-3) < 1e-9 && mono && kt[0] / kt[4] > 10, `tailAk обращает tailK400 (k хвоста при 400 нм = ${kt[0].toExponential(4)}), k хвоста монотонно растёт к синему краю: ${kt.map((v, i) => lamK[i] + " нм: " + v.toExponential(2)).join(", ")} (отношение 400/800 = ${(kt[0] / kt[4]).toFixed(0)})`);
   const dn = nk.n.map((v, i) => v - nk0.n[i]);
   console.log(`   вклад хвоста в n (КК): ${dn.map((v, i) => lamK[i] + " нм: " + v.toExponential(2)).join(", ")}`);
+}
+
+// ================================================================ 8. Задняя сторона подложки: некогерентное сложение пучков
+console.log("\n7. Задняя сторона подложки: матричный метод (r, t, r′, t′), тождество обращённой стопки, классическая формула для пластины, предел f → 0");
+{
+  const lam = []; for (let l = 400; l <= 800; l += 4) lam.push(l);
+  const m = E.MATERIALS.tio2, Nsub = E.substrateN("bk7", lam), phi = 65, layers = E.buildLayers(lam, 1017.3, m, -0.008, 2.2, 40);
+  // (а) f → 0: N, C, S матричного метода совпадают с рекурсией Эйри
+  const a = E.ncsBackside(lam, layers, Nsub, phi, { f: 1e-300, ds: 1e6 }); const [RP, RS] = E.rhoStack(lam, layers, Nsub, phi); const q = E.ncsFromR(RP, RS);
+  let d0 = 0; for (let i = 0; i < lam.length; i++) d0 = Math.max(d0, Math.abs(a.N[i] - q.N[i]), Math.abs(a.C[i] - q.C[i]), Math.abs(a.S[i] - q.S[i]));
+  check(d0 < 1e-12, `f → 0: N, C, S матричного метода с некогерентной суммой совпадают с рекурсией Эйри (42 слоя): max разность ${d0.toExponential(1)}`);
+  // (б) r′, t′ из тождества M′ = J Mᵀ J против прямого расчёта обращённой стопки (свет из подложки, слои в обратном порядке, «подложка» — воздух)
+  let worst = 0;
+  for (const i of [0, 25, 50, 100]) {
+    const L = layers.map(Lr => ({ N: Lr.N[i], d: Lr.d })), ns = Nsub[i], cf = E.stackCoefs(lam[i], L, ns, phi);
+    const alpha2 = Math.sin(phi * PI / 180) ** 2, k = 2 * PI / lam[i];
+    for (const pol of ["s", "p"]) {
+      const qOf = (N) => { const c = cosGamma(N, alpha2); return pol === "s" ? C.mul(N, c) : C.div(N, c); };
+      const matOf = (Ls) => { let M = [[C.ONE, [0, 0]], [[0, 0], C.ONE]]; for (const Lr of Ls) { const c = cosGamma(Lr.N, alpha2), ph = C.scale(C.mul(Lr.N, c), k * Lr.d), qj = qOf(Lr.N), cp = C.cos(ph), sp = C.sin(ph); const Mj = [[cp, C.div(C.mul(C.I, sp), qj)], [C.mul(C.mul(C.I, qj), sp), cp]]; M = [[C.add(C.mul(M[0][0], Mj[0][0]), C.mul(M[0][1], Mj[1][0])), C.add(C.mul(M[0][0], Mj[0][1]), C.mul(M[0][1], Mj[1][1]))], [C.add(C.mul(M[1][0], Mj[0][0]), C.mul(M[1][1], Mj[1][0])), C.add(C.mul(M[1][0], Mj[0][1]), C.mul(M[1][1], Mj[1][1]))]]; } return M; };
+      const Mr = matOf(L.slice().reverse()), qa = pol === "s" ? [Math.cos(phi * PI / 180), 0] : [1 / Math.cos(phi * PI / 180), 0], qs = qOf(ns);
+      const a11 = C.mul(qs, Mr[0][0]), a12 = C.mul(C.mul(qs, qa), Mr[0][1]), a22 = C.mul(qa, Mr[1][1]), a21 = Mr[1][0], den = C.add(C.add(a11, a12), C.add(a22, a21));
+      const rP = C.div(C.sub(C.add(a11, a12), C.add(a22, a21)), den), tP = C.div(C.scale(qs, 2), den);
+      worst = Math.max(worst, C.abs(C.sub(rP, cf[pol].rb)), C.abs(C.sub(tP, cf[pol].tb)));
+    }
+  }
+  check(worst < 1e-12, `r′, t′ (отражение и пропускание стопки со стороны подложки) из M′ = J Mᵀ J против прямого расчёта обращённой стопки: max расхождение ${worst.toExponential(1)}`);
+  // (в) голая пластина BK7: R_tot = R + T T_b R_b/(1 − R_b²) — классическая некогерентная сумма
+  let dc = 0;
+  { const i = 50, cf = E.stackCoefs(lam[i], [], Nsub[i], phi);
+    for (const pol of ["s", "p"]) { const c = cf[pol], R = C.abs2(c.r), qa = c.qa[0], qs = c.qs[0], T = qs / qa * C.abs2(c.t), rb = (qs - qa) / (qs + qa), Rb = rb * rb, Tb = qa / qs * C.abs2(c.tb);
+      const classic = R + T * Tb * Rb / (1 - Rb * Rb), core = R + C.abs2(C.mul(c.t, c.tb)) * Rb / (1 - C.abs2(c.rb) * Rb); dc = Math.max(dc, Math.abs(classic - core), Math.abs(T * Tb - C.abs2(C.mul(c.t, c.tb)))); } }
+  const bare0 = E.modelPsiDelta(lam, Nsub, phi, 0, m, 0, 0, 1, null), bare1 = E.modelPsiDelta(lam, Nsub, phi, 0, m, 0, 0, 1, { f: 1, ds: 1e6 });
+  check(dc < 1e-12, `голая пластина BK7, 65°: |t t′|² = T·T_b и R_tot = R + T T_b R_b/(1 − R_b²) для s и p (расхождение ${dc.toExponential(1)}); Ψ при 550 нм ${bare0.psi[37].toFixed(3)}° → ${bare1.psi[37].toFixed(3)}° при f = 1, Δ = ${bare1.del[37].toFixed(1)}°`);
+  // (г) величина эффекта и поглощающая подложка
+  const f0 = E.modelPsiDelta(lam, Nsub, phi, 1017.3, m, -0.008, 2.2, 40, null), f1 = E.modelPsiDelta(lam, Nsub, phi, 1017.3, m, -0.008, 2.2, 40, { f: 1, ds: 1e6 });
+  let dP = 0, dD = 0; for (let i = 0; i < lam.length; i++) { dP = Math.max(dP, Math.abs(f0.psi[i] - f1.psi[i])); dD = Math.max(dD, Math.abs(wrap(f0.del[i] - f1.del[i]))); }
+  const NsSi = E.substrateN("si", lam), s1 = E.modelPsiDelta(lam, NsSi, 70, 612.5, E.MATERIALS.si3n4, 0, 0, 1, null), s2 = E.modelPsiDelta(lam, NsSi, 70, 612.5, E.MATERIALS.si3n4, 0, 0, 1, { f: 1, ds: 5e5 });
+  let dS = 0; for (let i = 0; i < lam.length; i++) dS = Math.max(dS, Math.abs(s1.psi[i] - s2.psi[i]));
+  check(dP > 1 && dS < 1e-9, `TiO₂ 1017 нм / BK7, 65°, f = 1: max|ΔΨ| = ${dP.toFixed(2)}°, max|ΔΔ| = ${dD.toFixed(1)}° (сотни σ — без учёта задней стороны фит невозможен); Si₃N₄ / c-Si 0.5 мм: |ΔΨ| = ${dS.toExponential(1)}° — поглощающая подложка гасит вклад`);
+  // (д) численный якобиан при задней стороне против аналитического при f → 0
+  const lam2 = []; for (let l = 400; l <= 800; l += 2) lam2.push(l);
+  const Ns2 = E.substrateN("bk7", lam2), sig = lam2.map(() => 0.02), sigD = sig.map(v => 2.2 * v), free = ["d", "A", "Auv", "Eg", "dRough", "delta", "Ak"], P = { d: 1017.3, A: 262, Auv: 131, Eg: 3.37, dRough: 2.2, delta: -0.008, Ak: 0.05 };
+  const m0 = E.modelPsiDelta(lam2, Ns2, phi, P.d, Object.assign({}, m, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak }), P.delta, P.dRough, 40, null);
+  const data = { lam: lam2, psi: m0.psi.map(v => v + 0.1), del: m0.del.map(v => (v + 1) % 360), sigPsi: sig, sigDel: sigD };
+  const fnA = E.makeResidJacFn(data, { mat: m, subKey: "bk7", Nsub: Ns2, phi, back: null }, free, {}, 40), fnN = E.makeResidJacFn(data, { mat: m, subKey: "bk7", Nsub: Ns2, phi, back: { f: 1e-12, ds: 1e6 } }, free, {}, 40);
+  const x0 = free.map(k => P[k]), evA = fnA(x0, true), evN = fnN(x0, true);
+  let wj = 0; for (let p = 0; p < free.length; p++) { let mx = 0, nrm = 0; for (let i = 0; i < evA.r.length; i++) { mx = Math.max(mx, Math.abs(evA.J[p][i] - evN.J[p][i])); nrm = Math.max(nrm, Math.abs(evA.J[p][i])); } wj = Math.max(wj, mx / nrm); }
+  check(wj < 1e-4, `численный якобиан (центральные разности, используется при включённой задней стороне) против аналитического при f → 0: max относительное расхождение ${wj.toExponential(1)}`);
 }
 
 console.log(failures ? `\nОШИБОК: ${failures}` : "\nВсе проверки по книге пройдены");

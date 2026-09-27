@@ -1,5 +1,5 @@
-/* Дымовой тест интерфейса в jsdom: встроенный образец, симуляция с большим градиентом, симуляция с поглощением, очистка панелей.
-   Запуск: npm install && node test/ui_smoke.js   (≈3–5 мин на одном ядре) */
+/* Дымовой тест интерфейса в jsdom: встроенный образец, симуляция с большим градиентом, симуляция с поглощением,
+   образец с задней стороной подложки, очистка панелей. Запуск: npm install && node test/ui_smoke.js   (≈12–15 мин на одном ядре; jsdom втрое медленнее браузера) */
 const { JSDOM } = require("jsdom"); const fs = require("fs"), path = require("path");
 let html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
 html = html.replace(/<script src="https:\/\/cdnjs[^"]*chart[^"]*"><\/script>/, '<script>window.Chart = class { constructor(){} destroy(){} resize(){} };</script>')
@@ -42,7 +42,21 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   const kFound = parseFloat((tr3["Поглощение: k хвоста при 400 нм"][2].match(/найдено ([\d.]+)/) || [])[1]);
   check(Math.abs(kFound - 1.5) < 0.4, `поглощение найдено: k₄₀₀ = ${kFound}·10⁻³ (истина 1.5·10⁻³)`);
   check(/k₄₀₀/.test(txt($("causeOut"))) && /P\(поглощение\)/.test(txt($("diagOut"))), "поглощение показано в диагнозе и в анализе причин");
-  console.log("4. Повторный шаг 1 очищает шаги 2–4");
+  console.log("4. Встроенный образец 09: задняя сторона подложки (задано 0.95 ± 0.02, истина 0.96)");
+  $("exSel").value = "8"; $("exSel").dispatchEvent(new w.Event("change")); await new Promise(r => setTimeout(r, 100));
+  check($("ckBack").checked && $("backF").value === "0.95" && !$("backF").disabled && /задняя сторона подложки: доля 0.95/.test($("dataInfo").textContent), "флажок задней стороны и доля подставлены из образца: " + $("dataInfo").textContent);
+  sec = await runAll(400); const tr4 = truthRows();
+  check(!/не совпадает/.test(tr4["Набор дефектов"][2]), `набор дефектов совпал: «${tr4["Набор дефектов"][1]}» (${sec.toFixed(0)} с)`);
+  check(/0\.960/.test(tr4["Задняя сторона подложки, доля"][1]) && /в модели 0\.950/.test(tr4["Задняя сторона подложки, доля"][2]), "таблица истины показывает истинную и заданную долю: " + tr4["Задняя сторона подложки, доля"].join(" | "));
+  check(/доля задней стороны как у образца/.test(txt($("causeOut"))), "в бюджете отклонения есть строка про долю задней стороны");
+  const dErr = parseFloat((tr4["d, нм"][2].match(/ошибка (-?[\d.]+)/) || [])[1]);
+  check(Math.abs(dErr) < 1.5, `толщина найдена с ошибкой ${dErr} нм`);
+  console.log("5. Снятие флажка задней стороны сбрасывает шаги, установка обратно — тоже");
+  $("ckBack").click(); await new Promise(r => setTimeout(r, 50));
+  check(/Нажмите «Опорный фит»/.test(txt($("refOut"))) && $("backF").disabled && /задней стороны нет/.test($("dataInfo").textContent), "панели сброшены, поля задней стороны отключены");
+  $("ckBack").click(); await new Promise(r => setTimeout(r, 50));
+  check(!$("backF").disabled && /доля 0.95/.test($("dataInfo").textContent), "поля снова активны");
+  console.log("6. Повторный шаг 1 очищает шаги 2–4");
   $("btn1").click(); await new Promise(r => setTimeout(r, 100));
   check(/Сначала опорный фит/.test(txt($("trainOut"))) && /Сначала обучение/.test(txt($("diagOut"))) && /Сначала диагноз/.test(txt($("finOut"))) && $("causeOut").innerHTML === "" && $("btn3").disabled && $("btn4").disabled, "панели очищены, кнопки 3–4 отключены");
   console.log(failures ? `\nОШИБОК: ${failures}` : "\nВсе проверки пройдены");

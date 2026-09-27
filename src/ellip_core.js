@@ -29,19 +29,40 @@
       + 2 * A * E0 * C * Eg / (PI * zeta4) * Math.log(Math.abs(E - Eg) * (E + Eg) / Math.sqrt((E02 - Eg2) * (E02 - Eg2) + Eg2 * C2));
     return [eps1, eps2];
   }
+  /** Хвост поглощения ниже края (дефект «поглощение»): второй осциллятор Тауца–Лоренца с теми же E₀ и C, что у материала,
+   *  порогом E_t = TAIL_ET и силой m.Ak (эВ). ε₂ хвоста ∝ (E − E_t)²/E · L(E) растёт к синему краю; ε₁ — то же КК-выражение
+   *  Джеллисона–Модина, поэтому хвост причинен. При m.Ak = 0 (или undefined) дисперсия совпадает с чистым материалом. */
+  const TAIL_ET = 1.2;
   /** Комплексный показатель плёнки в конвенции n - ik: массив [n, -k] на каждой λ. */
   function filmN(lam, m) {
-    const out = new Array(lam.length);
+    const out = new Array(lam.length), Ak = m.Ak || 0;
     for (let i = 0; i < lam.length; i++) {
       const E = HC / lam[i];
       const [e1, e2] = tlEps(E, m.A, m.E0, m.C, m.Eg);
-      const eps1 = 1 + e1 + m.Auv / (m.Euv * m.Euv - E * E);
-      const N = csqrt([eps1, e2]);
+      let eps1 = 1 + e1 + m.Auv / (m.Euv * m.Euv - E * E), eps2 = e2;
+      if (Ak) { const [t1, t2] = tlEps(E, Ak, m.E0, m.C, TAIL_ET); eps1 += t1; eps2 += t2; }
+      const N = csqrt([eps1, eps2]);
       out[i] = [N[0], -Math.abs(N[1])];
     }
     return out;
   }
   function filmNK(lam, m) { const N = filmN(lam, m); return { n: N.map(v => v[0]), k: N.map(v => -v[1]) }; }
+  /** k хвоста поглощения при 400 нм (k плёнки с хвостом минус k чистого материала) — характерный размер дефекта «поглощение». */
+  function tailK400(m, Ak) {
+    const k1 = filmNK([400], Object.assign({}, m, { Ak: Ak })).k[0], k0 = filmNK([400], Object.assign({}, m, { Ak: 0 })).k[0];
+    return k1 - k0;
+  }
+  /** Обратное к tailK400: сила хвоста A_k (эВ), дающая заданный k хвоста при 400 нм (монотонная зависимость; Ньютон). */
+  function tailAk(m, k400) {
+    if (!(k400 > 0)) return 0;
+    let Ak = k400 / Math.max(1e-12, tailK400(m, 1e-3) / 1e-3);            // линейное приближение (k ≈ ε₂/2n)
+    for (let it = 0; it < 12; it++) {
+      const f = tailK400(m, Ak) - k400; if (Math.abs(f) < 1e-9 * Math.max(k400, 1e-6)) break;
+      const h = Math.max(1e-6, 1e-3 * Ak), df = (tailK400(m, Ak + h) - tailK400(m, Ak)) / h;
+      const step = f / df; Ak = Math.max(0.1 * Ak, Ak - step);
+    }
+    return Ak;
+  }
 
   // ---------------------------------------------------------------- подложки (полубесконечные)
   function nBK7(l) { const x = (l / 1000) ** 2; return Math.sqrt(1 + 1.03961212 * x / (x - 0.00600069867) + 0.231792344 * x / (x - 0.0200179144) + 1.01046945 * x / (x - 103.560653)); }
@@ -74,6 +95,10 @@
     sio2: { name: 'SiO₂ (термический)', A: 295.50, E0: 10.35, C: 3.00, Eg: 8.70, Auv: 10.76, Euv: 16.0 },
     al2o3: { name: 'Al₂O₃ (аморфный)', A: 182.48, E0: 9.50, C: 3.50, Eg: 6.60, Auv: 11.45, Euv: 14.0 },
     zro2: { name: 'ZrO₂ (аморфный)', A: 449.00, E0: 5.95, C: 3.00, Eg: 5.00, Auv: 28.74, Euv: 13.0 },
+    // материалы с краем поглощения в измеряемом диапазоне: параметры подобраны по табличным n, k из литературы (см. README, разд. 3.3)
+    sinx: { name: 'SiNₓ:H (PECVD, обогащённый Si)', A: 52.04, E0: 7.38, C: 3.26, Eg: 2.17, Auv: 79.35, Euv: 13.0 },   // Vogt 2015 (n = 2.13 при 633 нм): k(400) ≈ 0.036, k(500) ≈ 0.005
+    ceo2: { name: 'CeO₂ (поликристаллический)', A: 65.58, E0: 3.92, C: 0.89, Eg: 2.81, Auv: 414.58, Euv: 13.0 },    // ALD, arXiv:1705.04071: k(400) ≈ 0.03, k ≥ 440 нм ≈ 0
+    wo3: { name: 'WO₃ (тонкая плёнка)', A: 57.22, E0: 4.41, C: 1.20, Eg: 3.26, Auv: 311.01, Euv: 13.0 },              // Kulikova 2020, Opt. Express 28, 32049: k(350) ≈ 0.023, k ≥ 380 нм ≈ 0
   };
 
   // ---------------------------------------------------------------- слои
@@ -340,12 +365,13 @@
 
   // ---------------------------------------------------------------- модели фита
   const wrap = (v) => { let w = ((v + 180) % 360 + 360) % 360 - 180; return w; };
-  const PARAM_NAMES = ['d', 'A', 'Auv', 'Eg', 'dRough', 'delta'];
+  const PARAM_NAMES = ['d', 'A', 'Auv', 'Eg', 'dRough', 'delta', 'Ak'];
+  const K400_MAX = 0.05;                                                  // верхняя граница k хвоста при 400 нм в окончательном фите
   function makeResidFn(data, cfg, free, fixedVals, M) {
     const Nsub = cfg.Nsub, lam = data.lam, n = lam.length;
     return (x) => {
       const P = Object.assign({}, fixedVals); free.forEach((k, i) => P[k] = x[i]);
-      const m = Object.assign({}, cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg });
+      const m = Object.assign({}, cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak || 0 });
       const r = modelPsiDelta(lam, Nsub, cfg.phi, P.d, m, P.delta || 0, P.dRough || 0, M || 20);
       const out = new Float64Array(2 * n);
       for (let i = 0; i < n; i++) { out[i] = (data.psi[i] - r.psi[i]) / data.sigPsi[i]; out[n + i] = wrap(data.del[i] - r.del[i]) / data.sigDel[i]; }
@@ -358,15 +384,16 @@
       case 'd': return [prior.dMin, prior.dMax, 5];
       case 'A': return [0.2 * m.A, 4 * m.A, 0.05 * m.A];
       case 'Auv': return [0, 3 * Math.abs(m.Auv) + 100, 0.05 * Math.abs(m.Auv) + 5];
-      case 'Eg': return [Math.max(1.5, m.Eg - 1.0), Math.min(m.E0 - 0.15, m.Eg + 1.0), 0.05];
+      case 'Eg': return [Math.max(0.8, m.Eg - 1.0), Math.min(m.E0 - 0.15, m.Eg + 1.0), 0.05];
       case 'dRough': return [0, 12, 0.5];
       case 'delta': return [-0.20, 0.20, 0.01];
+      case 'Ak': { const s = tailAk(m, 1e-3); return [0, tailAk(m, K400_MAX), s]; }      // k хвоста при 400 нм от 0 до K400_MAX
     }
   }
   /** Опорный фит однородной плёнки: грубый перебор d при справочной дисперсии → три лучших локальных минимума χ²(d) →
    *  ЛМ (аналитический якобиан, масштабированные параметры) по (d, A, Auv, Eg) из каждого; лучший по χ². */
   function referenceFit(data, cfg, prior) {
-    const fixed = { dRough: 0, delta: 0 };
+    const fixed = { dRough: 0, delta: 0, Ak: 0 };
     const base = { A: cfg.mat.A, Auv: cfg.mat.Auv, Eg: cfg.mat.Eg };
     const scan = makeResidJacFn(data, cfg, ['d'], Object.assign({}, fixed, base), 1);
     const step = Math.max(0.5, (prior.dMax - prior.dMin) / 120), grid = [], cost = [];
@@ -384,15 +411,15 @@
       const r = lmFitJac(fn, [d0, base.A, base.Auv, base.Eg], b.map(v => v[0]), b.map(v => v[1]), 80); nfev += r.nfev;
       if (!res || r.chi2 < res.chi2) res = r;
     }
-    const P = {}; free.forEach((k, i) => P[k] = res.x[i]); P.dRough = 0; P.delta = 0;
+    const P = {}; free.forEach((k, i) => P[k] = res.x[i]); P.dRough = 0; P.delta = 0; P.Ak = 0; P.k400 = 0;
     const E = {}; free.forEach((k, i) => E[k] = res.err[i]);
     return { P, E, resid: res.resid, chi2: res.chi2, free, starts, startCosts, nfev };
   }
-  /** Фит в выбранной модели дефектов: несколько стартов (толщины из перебора опорного фита × знак градиента),
-   *  лучший по χ² дотягивается до сходимости; при |δ| > 4 % — повтор с 80 подслоями. */
+  /** Фит в выбранной модели дефектов flags = {grad, rough, abs}: несколько стартов (толщины из перебора опорного фита × знак градиента),
+   *  лучший по χ² дотягивается до сходимости; при |δ| > 4 % — повтор с 80 подслоями. Поглощение — сила хвоста A_k (старт из p0.Ak). */
   function finalFit(data, cfg, prior, flags, p0) {
-    const free = ['d', 'A', 'Auv', 'Eg']; if (flags.rough) free.push('dRough'); if (flags.grad) free.push('delta');
-    const fixed = { dRough: 0, delta: 0 };
+    const free = ['d', 'A', 'Auv', 'Eg']; if (flags.rough) free.push('dRough'); if (flags.grad) free.push('delta'); if (flags.abs) free.push('Ak');
+    const fixed = { dRough: 0, delta: 0, Ak: 0 };
     const b = free.map(k => boundsFor(k, cfg, prior));
     const margin = 0.3 * (prior.dMax - prior.dMin); b[0] = [prior.dMin - margin, prior.dMax + margin, b[0][2]];
     const lo = b.map(v => v[0]), hi = b.map(v => v[1]);
@@ -403,18 +430,37 @@
     const dStarts = [p0.d].concat(alt).slice(0, 3);
     const d0 = flags.grad ? (p0.delta || 0) : 0;
     const deltaStarts = flags.grad ? (Math.abs(d0) <= 0.01 ? (Math.abs(d0) > 1e-4 ? [d0, -d0] : [0.004, -0.004]) : [d0]) : [0];
-    const cands = [];
-    for (const dS of dStarts) for (const dl of deltaStarts) cands.push(clampP(Object.assign({}, p0, { d: dS, delta: dl, dRough: Math.max(0.1, p0.dRough || 0.1) })));
     // разведка бассейнов на грубой модели (10 подслоёв), затем лучший старт дотягивается на 40 подслоях
     const fn10 = makeResidJacFn(data, cfg, free, fixed, flags.grad ? 10 : 40), fn40 = makeResidJacFn(data, cfg, free, fixed, 40);
-    let best = null, nfev = 0;
-    if (cands.length > 1) cands.forEach((x0) => { const r = lmFitJac(fn10, x0, lo, hi, 25); nfev += r.nfev; if (!best || r.chi2 < best.chi2) best = r; });
-    let res = lmFitJac(fn40, best ? best.x : cands[0], lo, hi, 80); nfev += res.nfev;
+    let best = null, nfev = 0, nStarts = 0;
+    let base = Object.assign({}, p0, { dRough: Math.max(0.1, p0.dRough || 0.1), Ak: 0 });
+    if (flags.abs) {
+      // Поглощение: опорный фит без хвоста искажает дисперсию (A, E_g растут, компенсируя затухание полос), и старт из него
+      // ведёт в ложный минимум. Раунд А: старты по силе хвоста (оценка ИИ и k₄₀₀ = 10⁻⁴, 10⁻³, 10⁻²) × дисперсия
+      // (опорный фит / справочник) при основной толщине; лучший по χ² задаёт дисперсию и хвост для раунда Б.
+      const kEst = p0.Ak > 0 ? tailK400(cfg.mat, p0.Ak) : 0, ks = [];
+      for (const k of [kEst, 1e-4, 1e-3, 1e-2]) if (k >= 3e-5 && !ks.some(v => Math.abs(Math.log(v / k)) < 0.5)) ks.push(k);
+      const disp = [{ A: p0.A, Auv: p0.Auv, Eg: p0.Eg }, { A: cfg.mat.A, Auv: cfg.mat.Auv, Eg: cfg.mat.Eg }];
+      let bestA = null;
+      for (const dp of disp) for (const k of ks) {
+        const x0 = clampP(Object.assign({}, base, dp, { delta: deltaStarts[0], Ak: tailAk(cfg.mat, k) }));
+        const r = lmFitJac(fn10, x0, lo, hi, 20); nfev += r.nfev; nStarts++;
+        if (!bestA || r.chi2 < bestA.chi2) bestA = r;
+      }
+      const PA = {}; free.forEach((k, i) => PA[k] = bestA.x[i]);
+      base = Object.assign({}, base, { A: PA.A, Auv: PA.Auv, Eg: PA.Eg, Ak: PA.Ak, dRough: Math.max(0.1, PA.dRough || 0.1) });
+      if (dStarts.length === 1 && deltaStarts.length === 1) best = bestA;
+    }
+    const cands = [];
+    for (const dS of dStarts) for (const dl of deltaStarts) cands.push(clampP(Object.assign({}, base, { d: dS, delta: dl })));
+    if (cands.length > 1) cands.forEach((x0) => { const r = lmFitJac(fn10, x0, lo, hi, 25); nfev += r.nfev; nStarts++; if (!best || r.chi2 < best.chi2) best = r; });
+    let res = lmFitJac(fn40, best ? best.x : cands[0], lo, hi, 80); nfev += res.nfev; nStarts = Math.max(1, nStarts);
     const iD = free.indexOf('delta');
     if (iD >= 0 && Math.abs(res.x[iD]) > 0.04) { const r80 = lmFitJac(makeResidJacFn(data, cfg, free, fixed, 80), res.x, lo, hi, 40); nfev += r80.nfev; res = r80; }   // 80 подслоёв
-    const P = { dRough: 0, delta: 0 }; free.forEach((k, i) => P[k] = res.x[i]);
+    const P = { dRough: 0, delta: 0, Ak: 0 }; free.forEach((k, i) => P[k] = res.x[i]);
     const E = {}; free.forEach((k, i) => E[k] = res.err[i]);
-    return { P, E, resid: res.resid, chi2: res.chi2, free, nfev, starts: cands.length };
+    if (flags.abs) { const h = Math.max(1e-6, 1e-3 * P.Ak), dk = (tailK400(cfg.mat, P.Ak + h) - tailK400(cfg.mat, P.Ak)) / h; P.k400 = tailK400(cfg.mat, P.Ak); E.k400 = E.Ak * dk; } else { P.k400 = 0; }
+    return { P, E, resid: res.resid, chi2: res.chi2, free, nfev, starts: nStarts };
   }
 
   // ---------------------------------------------------------------- аналитический якобиан (Фурман–Тихонравов, разд. 1.4.1: формулы 1.4.9–1.4.16) и ЛМ с масштабированием
@@ -427,35 +473,37 @@
   const trace2 = (G, X) => cadd(cadd(cmul(G[0][0], X[0][0]), cmul(G[0][1], X[1][0])), cadd(cmul(G[1][0], X[0][1]), cmul(G[1][1], X[1][1])));
   const I2 = [[[1, 0], [0, 0]], [[0, 0], [1, 0]]];
 
-  /** Показатель плёнки N = n − ik и его производные по A, Auv, Eg (комплексные): N = sqrt(conj ε), dN/dp = conj(∂ε/∂p)/(2N).
-   *  ∂ε/∂A и ∂ε/∂Auv аналитические (ε_TL линейна по A), ∂ε/∂Eg — центральная разность по скалярной функции. */
+  /** Показатель плёнки N = n − ik и его производные по A, Auv, Eg, Ak (комплексные): N = sqrt(conj ε), dN/dp = conj(∂ε/∂p)/(2N).
+   *  ∂ε/∂A, ∂ε/∂Auv и ∂ε/∂Ak аналитические (ε_TL линейна по силе осциллятора), ∂ε/∂Eg — центральная разность по скалярной функции. */
   function filmNJac(lam, m) {
-    const n = lam.length, N = new Array(n), dA = new Array(n), dAuv = new Array(n), dEg = new Array(n), h = 1e-5;
+    const n = lam.length, N = new Array(n), dA = new Array(n), dAuv = new Array(n), dEg = new Array(n), dAk = new Array(n), h = 1e-5, Ak = m.Ak || 0;
     for (let i = 0; i < n; i++) {
       const E = HC / lam[i], [e1, e2] = tlEps(E, m.A, m.E0, m.C, m.Eg), uvd = m.Euv * m.Euv - E * E;
-      let Nv = csqrt([1 + e1 + m.Auv / uvd, -e2]); Nv = [Math.abs(Nv[0]), -Math.abs(Nv[1])]; N[i] = Nv;
+      const [t1, t2] = tlEps(E, 1, m.E0, m.C, TAIL_ET);                                   // хвост единичной силы: ∂ε/∂Ak
+      let Nv = csqrt([1 + e1 + m.Auv / uvd + (Ak ? Ak * t1 : 0), -(e2 + (Ak ? Ak * t2 : 0))]); Nv = [Math.abs(Nv[0]), -Math.abs(Nv[1])]; N[i] = Nv;
       const g = cdiv([0.5, 0], Nv);
       dA[i] = cmul(g, [e1 / m.A, -e2 / m.A]);
       dAuv[i] = cmul(g, [1 / uvd, 0]);
+      dAk[i] = cmul(g, [t1, -t2]);
       const [p1, p2] = tlEps(E, m.A, m.E0, m.C, m.Eg + h), [q1, q2] = tlEps(E, m.A, m.E0, m.C, m.Eg - h);
       dEg[i] = cmul(g, [(p1 - q1) / (2 * h), -(p2 - q2) / (2 * h)]);
     }
-    return { N, dN: { A: dA, Auv: dAuv, Eg: dEg } };
+    return { N, dN: { A: dA, Auv: dAuv, Eg: dEg, Ak: dAk } };
   }
 
   /** Слои сверху вниз с чувствительностями: {N, d, dN: {param: [complex]}, dNs: {param: scalar}, dd: {param: number}};
    *  чувствительность по параметру = dNs[param] · dN[param][i]. Геометрия совпадает с buildLayers. */
   function buildLayersJac(lam, P, mat, M) {
-    const fj = filmNJac(lam, Object.assign({}, mat, { A: P.A, Auv: P.Auv, Eg: P.Eg }));
+    const fj = filmNJac(lam, Object.assign({}, mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak || 0 }));
     const Nf = fj.N, delta = P.delta || 0, d = P.d, dRough = P.dRough || 0, n = lam.length, sub = delta ? M : 1;
     const film = [];
     for (let j = sub - 1; j >= 0; j--) {
       const z = sub === 1 ? 0.5 : (j + 0.5) / sub, sc = 1 + delta * (z - 0.5);
-      film.push({ N: sc === 1 ? Nf : Nf.map(v => [v[0] * sc, v[1] * sc]), d: d / sub, dN: { A: fj.dN.A, Auv: fj.dN.Auv, Eg: fj.dN.Eg, delta: Nf }, dNs: { A: sc, Auv: sc, Eg: sc, delta: z - 0.5 }, dd: { d: 1 / sub } });
+      film.push({ N: sc === 1 ? Nf : Nf.map(v => [v[0] * sc, v[1] * sc]), d: d / sub, dN: { A: fj.dN.A, Auv: fj.dN.Auv, Eg: fj.dN.Eg, Ak: fj.dN.Ak, delta: Nf }, dNs: { A: sc, Auv: sc, Eg: sc, Ak: sc, delta: z - 0.5 }, dd: { d: 1 / sub } });
     }
     const layers = [];
     if (dRough > 0) {
-      const top = film[0], N = new Array(n), dN = { A: new Array(n), Auv: new Array(n), Eg: new Array(n), delta: new Array(n) };
+      const top = film[0], N = new Array(n), dN = { A: new Array(n), Auv: new Array(n), Eg: new Array(n), Ak: new Array(n), delta: new Array(n) };
       for (let i = 0; i < n; i++) {
         const Nt = top.N[i], eps = cmul(Nt, Nt);
         const b = [0.5 * (eps[0] + 1), 0.5 * eps[1]], sq = csqrt(cadd(cmul(b, b), [8 * eps[0], 8 * eps[1]]));
@@ -463,9 +511,9 @@
         let Ne = csqrt(e); Ne = [Math.abs(Ne[0]), -Math.abs(Ne[1])]; N[i] = Ne;
         const dEdEt = cadd([0.125, 0], cdiv([sgn * (b[0] + 8) / 8, sgn * b[1] / 8], sq));           // dε_ema/dε_top
         const chain = cmul(cmul(dEdEt, cdiv([0.5, 0], Ne)), [2 * Nt[0], 2 * Nt[1]]);               // dN_e/dN_top
-        for (const key of ['A', 'Auv', 'Eg', 'delta']) { const v = top.dN[key][i], sc = top.dNs[key]; dN[key][i] = cmul(chain, [v[0] * sc, v[1] * sc]); }
+        for (const key of ['A', 'Auv', 'Eg', 'Ak', 'delta']) { const v = top.dN[key][i], sc = top.dNs[key]; dN[key][i] = cmul(chain, [v[0] * sc, v[1] * sc]); }
       }
-      layers.push({ N, d: dRough, dN, dNs: { A: 1, Auv: 1, Eg: 1, delta: 1 }, dd: { dRough: 1 } });
+      layers.push({ N, d: dRough, dN, dNs: { A: 1, Auv: 1, Eg: 1, Ak: 1, delta: 1 }, dd: { dRough: 1 } });
     }
     return layers.concat(film);
   }
@@ -593,7 +641,7 @@
       const P = Object.assign({}, fixedVals); free.forEach((k, i) => P[k] = x[i]);
       const r = new Float64Array(2 * n);
       if (needJ === false) {
-        const m = Object.assign({}, cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg });
+        const m = Object.assign({}, cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak || 0 });
         const [RP, RS] = rhoStack(lam, buildLayers(lam, P.d, m, P.delta || 0, P.dRough || 0, Mm), cfg.Nsub, cfg.phi);
         const { psi, del } = psiDeltaFromR(RP, RS);
         for (let i = 0; i < n; i++) { r[i] = (data.psi[i] - psi[i]) / data.sigPsi[i]; r[n + i] = wrap(data.del[i] - del[i]) / data.sigDel[i]; }
@@ -684,13 +732,27 @@
     for (let t = Math.ceil(ph[0] / 360 + 1e-9) * 360; t < ph[ph.length - 1]; t += 360) { HW.push(interp(t, ph, lam)); if (t + 180 < ph[ph.length - 1]) QW.push(interp(t + 180, ph, lam)); }
     return { HW, QW };
   }
+  /** Каналы остатка по якорям. В полуволновых точках однородная прозрачная плёнка «отсутствует» и Ψ = Ψ подложки при любых n и d,
+   *  поэтому Ψ-остаток в HW-якорях не зависит от того, как опорный фит подобрал дисперсию, и читает дефекты напрямую:
+   *  градиент сдвигает Ψ в HW-якорях примерно одинаково по всему диапазону (канал psiHW — среднее), поглощение — гасит контраст
+   *  полос тем сильнее, чем ближе к синему краю (∝ k(λ)·d/λ), поэтому его канал — перепад Ψ-остатка между синей и красной половинами
+   *  якорей: psiHWtrend = ⟨r_Ψ(HW)⟩_синие − ⟨r_Ψ(HW)⟩_красные; в четвертьволновых точках контраст гасится с противоположной стороны
+   *  (psiQWtrend — тот же перепад по QW-якорям). Половины — по середине диапазона λ; если одна пуста — по номеру якоря. */
   function channels(lam, resid, HW, QW) {
     const n = lam.length, rp = Array.from(resid.slice(0, n)), rd = Array.from(resid.slice(n));
     const at = (xs, ys) => xs.map(x => interp(x, lam, ys));
-    const psiHW = at(HW, rp), delHW = at(HW, rd), delQW = at(QW, rd);
+    const psiHW = at(HW, rp), delHW = at(HW, rd), delQW = at(QW, rd), psiQW = at(QW, rp);
     const mean = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : NaN, mabs = a => mean(a.map(Math.abs));
     const rms = a => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
-    return { psiHW: mean(psiHW), psiHWsd: Math.sqrt(Math.max(0, mean(psiHW.map(v => v * v)) - mean(psiHW) ** 2)), delHW: mabs(delHW), delQW: mabs(delQW), rmsPsi: rms(rp), rmsDel: rms(rd), nHW: HW.length };
+    const mid = (lam[0] + lam[n - 1]) / 2;
+    const trend = (xs, ys) => {
+      if (xs.length < 2) return 0;
+      let blue = [], red = []; xs.forEach((x, j) => (x < mid ? blue : red).push(ys[j]));
+      if (!blue.length || !red.length) { const h = Math.floor(xs.length / 2); blue = ys.slice(0, h); red = ys.slice(h); }
+      return mean(blue) - mean(red);
+    };
+    return { psiHW: mean(psiHW), psiHWsd: Math.sqrt(Math.max(0, mean(psiHW.map(v => v * v)) - mean(psiHW) ** 2)), delHW: mabs(delHW), delQW: mabs(delQW), rmsPsi: rms(rp), rmsDel: rms(rd),
+      psiHWtrend: trend(HW, psiHW), psiQWtrend: trend(QW, psiQW), nHW: HW.length };
   }
 
   // ---------------------------------------------------------------- ИИ: мультиномиальная логистическая регрессия (softmax, Adam) и гребневая регрессия
@@ -729,35 +791,46 @@
     return { predict: (x) => { const z = st.apply(x); let s = ym; for (let j = 0; j < D; j++) s += w[j] * z[j]; return s; } };
   }
 
-  // ---------------------------------------------------------------- классы дефектов
-  const CLASSES = [{ g: 0, r: 0, name: 'однородная плёнка' }, { g: 1, r: 0, name: 'градиент, n растёт к поверхности' }, { g: -1, r: 0, name: 'градиент, n падает к поверхности' },
-    { g: 0, r: 1, name: 'шероховатость' }, { g: 1, r: 1, name: 'градиент (n растёт) + шероховатость' }, { g: -1, r: 1, name: 'градиент (n падает) + шероховатость' }];
+  // ---------------------------------------------------------------- классы дефектов: градиент g ∈ {0, +1, −1} × шероховатость r ∈ {0, 1} × поглощение a ∈ {0, 1}
+  const CLASSES = (() => {
+    const base = [{ g: 0, r: 0, name: 'однородная плёнка' }, { g: 1, r: 0, name: 'градиент, n растёт к поверхности' }, { g: -1, r: 0, name: 'градиент, n падает к поверхности' },
+      { g: 0, r: 1, name: 'шероховатость' }, { g: 1, r: 1, name: 'градиент (n растёт) + шероховатость' }, { g: -1, r: 1, name: 'градиент (n падает) + шероховатость' }];
+    const abs = base.map(c => ({ g: c.g, r: c.r, a: 1, name: c.g === 0 && c.r === 0 ? 'поглощение' : c.name.replace('градиент, n растёт к поверхности', 'градиент (n растёт)').replace('градиент, n падает к поверхности', 'градиент (n падает)') + ' + поглощение' }));
+    return base.map(c => Object.assign({ a: 0 }, c)).concat(abs);
+  })();
+  /** Индекс класса по набору дефектов. */
+  const classIndex = (g, r, a) => CLASSES.findIndex(c => c.g === g && c.r === r && c.a === a);
+  const N_CHANNELS = 8;
 
-  /** Вектор признаков: остаток опорного фита + 6 чисел каналов якорей (Ψ в HW, разброс, |Δ| в HW и QW, RMS Ψ/Δ). */
+  /** Вектор признаков: остаток опорного фита + 8 чисел каналов якорей (Ψ в HW, разброс, |Δ| в HW и QW, RMS Ψ/Δ,
+   *  перепад Ψ-остатка синие − красные якоря HW и QW — затухание контраста полос к синему краю). */
   function featureVector(dd, cfg, resid) {
     const subDel = cfg.subDel || (cfg.subDel = modelPsiDelta(dd.lam, cfg.Nsub, cfg.phi, 0, cfg.mat, 0, 0, 1).del);
     const { HW, QW } = anchors(dd.lam, dd.del, subDel);
-    let ch = { psiHW: 0, psiHWsd: 0, delHW: 0, delQW: 0, rmsPsi: 0, rmsDel: 0 };
+    let ch = { psiHW: 0, psiHWsd: 0, delHW: 0, delQW: 0, rmsPsi: 0, rmsDel: 0, psiHWtrend: 0, psiQWtrend: 0 };
     if (HW.length >= 2 && QW.length >= 1) ch = channels(dd.lam, resid, HW, QW);
     const f = (v) => (isFinite(v) ? v : 0);
-    return Array.from(resid).concat([f(ch.psiHW), f(ch.psiHWsd), f(ch.delHW), f(ch.delQW), f(ch.rmsPsi), f(ch.rmsDel)]);
+    return Array.from(resid).concat([f(ch.psiHW), f(ch.psiHWsd), f(ch.delHW), f(ch.delQW), f(ch.rmsPsi), f(ch.rmsDel), f(ch.psiHWtrend), f(ch.psiQWtrend)]);
   }
-  /** Один обучающий пример: истина со случайными дефектами и мешающими факторами → опорный фит → остаток. */
+  /** Случайный размер дефекта в двух шкалах: с вероятностью ½ в тонкой [lo, small], иначе в [small, max] (если max > small). */
+  function twoScale(rng, lo, small, max) { small = Math.min(small, max); return (max > small + 1e-12 && rng.uniform() < 0.5) ? rng.range(small, max) : rng.range(lo, small); }
+  /** Один обучающий пример: истина со случайными дефектами и мешающими факторами → опорный фит → остаток.
+   *  nuis = {deltaMax, roughMax, kMax, bw, phiErr}; kMax — верхняя граница k хвоста поглощения при 400 нм. */
   function trainingExample(data, cfg, prior, nuis, rng, cls) {
     const c = CLASSES[cls];
-    const dm = nuis.deltaMax, small = Math.min(dm, 0.02);
-    const mag = (dm > small + 1e-9 && rng.uniform() < 0.5) ? rng.range(small, dm) : rng.range(0.0002, small);
-    const delta = c.g * mag, dRough = c.r ? rng.range(0.02, nuis.roughMax) : 0;
+    const delta = c.g * twoScale(rng, 0.0002, 0.02, nuis.deltaMax), dRough = c.r ? rng.range(0.02, nuis.roughMax) : 0;
+    const k400 = c.a ? twoScale(rng, 2e-5, 1e-3, nuis.kMax || 5e-3) : 0;
     const d = rng.range(prior.dMin, prior.dMax);
     const m = Object.assign({}, cfg.mat, { A: cfg.mat.A * (1 + rng.range(-0.05, 0.05)), Auv: cfg.mat.Auv * (1 + rng.range(-0.05, 0.05)) + rng.range(-2, 2), E0: cfg.mat.E0 + rng.range(-0.05, 0.05), C: cfg.mat.C + rng.range(-0.06, 0.06), Eg: cfg.mat.Eg + rng.range(-0.05, 0.05) });
     if (m.Auv < 0) m.Auv = 0;
+    if (k400 > 0) m.Ak = tailAk(m, k400);
     const opt = { bw: Math.max(0, nuis.bw + rng.range(-0.3, 0.3)), lamOffset: rng.range(-0.1, 0.1), driftPsi: [rng.range(-0.01, 0.01), rng.range(-0.015, 0.015)], driftDel: [rng.range(-0.03, 0.03), rng.range(-0.04, 0.04)], sigPsi: data.sigPsi, sigDel: data.sigDel };
     const s = synthesize(data.lam, cfg.subKey, cfg.phi + rng.range(-nuis.phiErr, nuis.phiErr), d, m, delta, dRough, opt, rng);
     const dd = { lam: data.lam, psi: s.psi, del: s.del, sigPsi: data.sigPsi, sigDel: data.sigDel };
     const fit = referenceFit(dd, cfg, prior);
-    return { x: featureVector(dd, cfg, fit.resid), y: cls, delta, dRough, d, dFit: fit.P.d, chi2: fit.chi2 };
+    return { x: featureVector(dd, cfg, fit.resid), y: cls, delta, dRough, k400, d, dFit: fit.P.d, chi2: fit.chi2 };
   }
 
-  const api = { HC, MATERIALS, SUBSTRATES, CLASSES, filmN, filmNK, substrateN, buildLayers, rhoStack, psiDeltaFromR, modelPsiDelta, rhoGraded, synthesizeClean, applyNoise, synthesize, makeRng, lmFit, lmFitJac, makeResidJacFn, rhoStackJac, buildLayersJac, filmNJac, psiDeltaJac, referenceFit, finalFit, anchors, channels, featureVector, trainSoftmax, ridge, trainingExample, wrap, interp, tlEps };
+  const api = { HC, TAIL_ET, K400_MAX, N_CHANNELS, MATERIALS, SUBSTRATES, CLASSES, classIndex, filmN, filmNK, tailK400, tailAk, substrateN, buildLayers, rhoStack, psiDeltaFromR, modelPsiDelta, rhoGraded, synthesizeClean, applyNoise, synthesize, makeRng, lmFit, lmFitJac, makeResidJacFn, rhoStackJac, buildLayersJac, filmNJac, psiDeltaJac, referenceFit, finalFit, anchors, channels, featureVector, trainSoftmax, ridge, trainingExample, wrap, interp, tlEps };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.EllipCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1,5 +1,5 @@
-/* Дымовой тест интерфейса в jsdom: встроенный образец, симуляция с большим градиентом, очистка панелей.
-   Запуск: npm install && node test/ui_smoke.js   (≈3–4 мин на одном ядре) */
+/* Дымовой тест интерфейса в jsdom: встроенный образец, симуляция с большим градиентом, симуляция с поглощением, очистка панелей.
+   Запуск: npm install && node test/ui_smoke.js   (≈3–5 мин на одном ядре) */
 const { JSDOM } = require("jsdom"); const fs = require("fs"), path = require("path");
 let html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
 html = html.replace(/<script src="https:\/\/cdnjs[^"]*chart[^"]*"><\/script>/, '<script>window.Chart = class { constructor(){} destroy(){} resize(){} };</script>')
@@ -31,7 +31,18 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   check(!/не совпадает/.test(tr2["Набор дефектов"][2]), `набор дефектов совпал (${sec.toFixed(0)} с)`);
   const dFound = parseFloat((tr2["δ, %"][2].match(/найдено (-?[\d.]+)/) || [])[1]);
   check(Math.abs(dFound - 8) < 0.3, `градиент найден: ${dFound} % (истина 8 %)`);
-  console.log("3. Повторный шаг 1 очищает шаги 2–4");
+  console.log("3. Симуляция: HfO2/Si 65°, поглощение k₄₀₀ = 1.5·10⁻³ + слой 1 нм, без градиента");
+  $("matSel").value = "hfo2"; $("matSel").dispatchEvent(new w.Event("change")); $("subSel").value = "si"; $("phi").value = "65"; $("dNom").value = "950"; $("dNom").dispatchEvent(new w.Event("change"));
+  $("simD").value = "933"; $("simDelta").value = "0"; $("simRough").value = "1.0"; $("simK").value = "1.5"; $("simK").dispatchEvent(new w.Event("input")); $("simSeed").value = "11";
+  check(/A_k/.test($("simKInfo").textContent), "подсказка к полю поглощения показывает k хвоста и A_k: " + $("simKInfo").textContent);
+  $("btnSim").click(); { const t0 = Date.now(); while (!/Сгенерировано|неверно|Нужно|ограничен/.test($("simStatus").textContent) && Date.now() - t0 < 60000) await new Promise(r => setTimeout(r, 100)); }
+  check(/Хвост поглощения/.test($("simStatus").textContent), "спектр с поглощением сгенерирован: " + $("simStatus").textContent.replace(/^.*Хвост/, "Хвост"));
+  sec = await runAll(500); const tr3 = truthRows();   // с 12 классами при 300 примерах классификатор ещё добавляет ложный градиент
+  check(!/не совпадает/.test(tr3["Набор дефектов"][2]), `набор дефектов совпал: «${tr3["Набор дефектов"][1]}» (${sec.toFixed(0)} с)`);
+  const kFound = parseFloat((tr3["Поглощение: k хвоста при 400 нм"][2].match(/найдено ([\d.]+)/) || [])[1]);
+  check(Math.abs(kFound - 1.5) < 0.4, `поглощение найдено: k₄₀₀ = ${kFound}·10⁻³ (истина 1.5·10⁻³)`);
+  check(/k₄₀₀/.test(txt($("causeOut"))) && /P\(поглощение\)/.test(txt($("diagOut"))), "поглощение показано в диагнозе и в анализе причин");
+  console.log("4. Повторный шаг 1 очищает шаги 2–4");
   $("btn1").click(); await new Promise(r => setTimeout(r, 100));
   check(/Сначала опорный фит/.test(txt($("trainOut"))) && /Сначала обучение/.test(txt($("diagOut"))) && /Сначала диагноз/.test(txt($("finOut"))) && $("causeOut").innerHTML === "" && $("btn3").disabled && $("btn4").disabled, "панели очищены, кнопки 3–4 отключены");
   console.log(failures ? `\nОШИБОК: ${failures}` : "\nВсе проверки пройдены");

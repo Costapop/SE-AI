@@ -3,7 +3,9 @@
    2) воспроизведение таблицы 1.2 (17-слойный узкополосный фильтр S (HL)^4 2H (LH)^4, λ0 = 500 нм);
    3) сравнение рекурсии Эйри ядра (rhoStack) с матричным методом при наклонном падении, поглощающих слоях и подложке;
    4) уравнение Риккати для локальной функции отражения (1.1.19, 1.1.20): непрерывный градиент n(z) против лестницы подслоёв;
-   5) закон сохранения энергии R + T = 1 для непоглощающей системы.
+   5) закон сохранения энергии R + T = 1 для непоглощающей системы;
+   6) аналитический якобиан (разд. 1.4.1) против конечных разностей, включая силу хвоста поглощения A_k;
+   7) хвост поглощения: численная проверка Крамерса–Кронига и монотонный рост k к синему краю.
    Запуск: node test/verify_book.js */
 const E = require("../src/ellip_core.js");
 const PI = Math.PI;
@@ -203,10 +205,12 @@ console.log("\n5. Аналитический якобиан по формула�
 {
   const lam = []; for (let l = 400; l <= 800; l += 2) lam.push(l);
   const sig = lam.map(l => 0.015 + 0.02 * Math.max(0, (650 - l) / 250) ** 2), sigD = sig.map(v => 2.2 * v);
-  const free = ["d", "A", "Auv", "Eg", "dRough", "delta"], hs = { d: 1e-3, A: 1e-3, Auv: 1e-3, Eg: 1e-6, dRough: 1e-4, delta: 1e-6 };
-  for (const [subKey, phi, matKey, P] of [["bk7", 65, "tio2", { d: 1017.3, A: 262, Auv: 131, Eg: 3.37, dRough: 2.2, delta: -0.008 }], ["si", 70, "si3n4", { d: 612.5, A: 160, Auv: 100, Eg: 4.65, dRough: 0.9, delta: 0.05 }]]) {
+  const free = ["d", "A", "Auv", "Eg", "dRough", "delta", "Ak"], hs = { d: 1e-2, A: 4e-3, Auv: 4e-3, Eg: 4e-6, dRough: 4e-4, delta: 2e-5, Ak: 2e-4 };   // шаги на минимуме суммы ошибок усечения и округления
+  for (const [subKey, phi, matKey, P] of [["bk7", 65, "tio2", { d: 1017.3, A: 262, Auv: 131, Eg: 3.37, dRough: 2.2, delta: -0.008, Ak: 0.05 }], ["si", 70, "si3n4", { d: 612.5, A: 160, Auv: 100, Eg: 4.65, dRough: 0.9, delta: 0.05, Ak: 0.3 }]]) {
     const mat = E.MATERIALS[matKey], cfg = { mat, subKey, Nsub: E.substrateN(subKey, lam), phi };
-    const data = { lam, psi: new Float64Array(lam.length), del: new Float64Array(lam.length), sigPsi: sig, sigDel: sigD };
+    // «данные» = модель в x0 + 0.1° по Ψ и 1° по Δ: невязка мала, и конечные разности не теряют точность на округлении (и нет разрыва wrap на 180°)
+    const m0 = E.modelPsiDelta(lam, cfg.Nsub, phi, P.d, Object.assign({}, mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak }), P.delta, P.dRough, 40);
+    const data = { lam, psi: m0.psi.map(v => v + 0.1), del: m0.del.map(v => (v + 1) % 360), sigPsi: sig, sigDel: sigD };
     const fn = E.makeResidJacFn(data, cfg, free, {}, 40), x0 = free.map(k => P[k]), ev = fn(x0, true);
     let worst = 0;
     for (let p = 0; p < free.length; p++) {
@@ -215,8 +219,35 @@ console.log("\n5. Аналитический якобиан по формула�
       for (let i = 0; i < rp.length; i++) { const num = (rp[i] - rm[i]) / (2 * h); maxAbs = Math.max(maxAbs, Math.abs(num - ev.J[p][i])); norm = Math.max(norm, Math.abs(num)); }
       worst = Math.max(worst, maxAbs / norm);
     }
-    check(worst < 1e-6, `${mat.name} на ${subKey}, ${phi}°, 42 слоя, 6 параметров (d, A, A_uv, E_g, слой ЭС, δ): макс. относительное расхождение ${worst.toExponential(1)}`);
+    check(worst < 1e-5, `${mat.name} на ${subKey}, ${phi}°, 42 слоя, 7 параметров (d, A, A_uv, E_g, слой ЭС, δ, A_k хвоста поглощения): макс. относительное расхождение ${worst.toExponential(1)} (уровень округления центральных разностей)`);
   }
+}
+
+// ================================================================ 7. Хвост поглощения: причинность (Крамерс–Крониг) и форма
+console.log("\n6. Хвост поглощения (второй осциллятор Тауца–Лоренца с порогом E_t): численная проверка соотношения Крамерса–Кронига и рост k к синему краю");
+{
+  // ε₁(E) − 1 = (2/π) P∫₀^∞ E' ε₂(E') / (E'² − E²) dE' для ε₂ хвоста; особенность выделяется вычитанием: ∫ [E'ε₂(E') − Eε₂(E)]/(E'² − E²) dE' + ε₂(E)·E·∫ dE'/(E'²−E²)
+  const Et = E.TAIL_ET, kkCheck = (E0, C, Eg, label) => {
+    const eps2 = (x) => E.tlEps(x, 1, E0, C, Eg)[1];
+    let worst = 0;
+    for (const Ex of [1.5, 2.0, 2.5, 3.1, 3.6]) {
+      const Emax = 400, N = 400000, hh = Emax / N; let s = 0; const e2x = eps2(Ex);
+      for (let i = 0; i <= N; i++) { const x = i * hh, w = (i === 0 || i === N) ? 0.5 : 1; const den = x * x - Ex * Ex; if (Math.abs(den) < 1e-12) continue; s += w * (x * eps2(x) - Ex * e2x) / den; }
+      s *= hh; const pv = Math.log(Math.abs((Emax - Ex) / (Emax + Ex))) / (2 * Ex);       // P∫₀^Emax dE'/(E'² − Ex²) = (1/2Ex) ln|(Emax−Ex)/(Emax+Ex)|
+      const eps1num = 2 / Math.PI * (s + Ex * e2x * pv), eps1an = E.tlEps(Ex, 1, E0, C, Eg)[0];
+      worst = Math.max(worst, Math.abs(eps1num - eps1an));
+    }
+    return worst;
+  };
+  const wTail = kkCheck(4.0, 1.77, Et, "хвост TiO2"), wHost = kkCheck(4.0, 1.77, 3.40, "TiO2");
+  check(wTail < 1e-4, `хвост (E₀ = 4.0, C = 1.77, E_t = ${Et} эВ): |ε₁(численный КК) − ε₁(аналитический)| ≤ ${wTail.toExponential(1)} в 1.5–3.6 эВ — хвост причинен`);
+  check(wHost < 1e-4, `основной осциллятор TiO₂ (E_g = 3.40): та же проверка, расхождение ${wHost.toExponential(1)}`);
+  const m = E.MATERIALS.tio2, Ak = E.tailAk(m, 1e-3), lamK = [400, 500, 600, 700, 800];
+  const nk = E.filmNK(lamK, Object.assign({}, m, { Ak })), nk0 = E.filmNK(lamK, m), kt = nk.k.map((v, i) => v - nk0.k[i]);
+  const mono = kt.every((v, i) => i === 0 || v < kt[i - 1]);
+  check(Math.abs(kt[0] - 1e-3) < 1e-9 && mono && kt[0] / kt[4] > 10, `tailAk обращает tailK400 (k хвоста при 400 нм = ${kt[0].toExponential(4)}), k хвоста монотонно растёт к синему краю: ${kt.map((v, i) => lamK[i] + " нм: " + v.toExponential(2)).join(", ")} (отношение 400/800 = ${(kt[0] / kt[4]).toFixed(0)})`);
+  const dn = nk.n.map((v, i) => v - nk0.n[i]);
+  console.log(`   вклад хвоста в n (КК): ${dn.map((v, i) => lamK[i] + " нм: " + v.toExponential(2)).join(", ")}`);
 }
 
 console.log(failures ? `\nОШИБОК: ${failures}` : "\nВсе проверки по книге пройдены");

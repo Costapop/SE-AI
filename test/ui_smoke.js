@@ -1,5 +1,5 @@
 /* Дымовой тест интерфейса в jsdom: встроенный образец, симуляция с большим градиентом, симуляция с поглощением,
-   образец с задней стороной подложки, очистка панелей. Запуск: npm install && node test/ui_smoke.js   (≈12–15 мин на одном ядре; jsdom втрое медленнее браузера) */
+   образец с задней стороной подложки, очистка панелей. Запуск: npm install && node test/ui_smoke.js   (≈25–30 мин на одном ядре: полоса в модели и задняя сторона удорожают фиты; jsdom втрое медленнее браузера) */
 const { JSDOM } = require("jsdom"); const fs = require("fs"), path = require("path");
 let html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
 html = html.replace(/<script src="https:\/\/cdnjs[^"]*chart[^"]*"><\/script>/, '<script>window.Chart = class { constructor(){} destroy(){} resize(){} };</script>')

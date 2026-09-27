@@ -11,7 +11,7 @@ ex = json.load(open(os.path.join(ROOT, "examples/examples.json"), encoding="utf-
 MAT = {"tio2": "TiO2 (аморфный)", "ta2o5": "Ta2O5 (аморфный)", "nb2o5": "Nb2O5 (аморфный)", "si3n4": "Si3N4 (LPCVD)", "hfo2": "HfO2 (аморфный)",
        "sinx": "SiNx:H (PECVD, обогащённый Si; край поглощения в диапазоне)", "ceo2": "CeO2 (поликристаллический; край поглощения в диапазоне)", "wo3": "WO3 (тонкая плёнка; край поглощения в диапазоне)",
        "zro2": "ZrO2 (аморфный)", "sio2": "SiO2 (термический)", "al2o3": "Al2O3 (аморфный)"}
-SUB = {"bk7": "Стекло BK7 (Зельмейер Schott)", "silica": "Плавленый кварц (Malitson 1965)", "si": "Кремний c-Si (табличные n, k)"}
+SUB = {"bk7": "Стекло BK7 (Зельмейер Schott)", "silica": "Плавленый кварц (Malitson 1965)", "si": "Кремний c-Si (Green 2008, 250–1450 нм)", "si_aspnes": "Кремний c-Si (Aspnes–Studna 1983)"}
 REF = {"tio2": dict(A=255.83, E0=4.00, C=1.77, Eg=3.40, Auv=137.65, Euv=11.0), "ta2o5": dict(A=321.34, E0=5.30, C=2.60, Eg=4.20, Auv=11.33, Euv=12.0),
        "nb2o5": dict(A=307.24, E0=4.70, C=2.30, Eg=3.75, Auv=69.07, Euv=11.0), "si3n4": dict(A=156.51, E0=7.20, C=3.60, Eg=4.60, Auv=103.31, Euv=13.0),
        "hfo2": dict(A=396.97, E0=6.20, C=2.80, Eg=5.20, Auv=16.82, Euv=13.0),

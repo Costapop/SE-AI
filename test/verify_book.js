@@ -6,7 +6,10 @@
    5) закон сохранения энергии R + T = 1 для непоглощающей системы;
    6) аналитический якобиан (разд. 1.4.1) против конечных разностей, включая силу хвоста поглощения A_k;
    7) хвост поглощения: численная проверка Крамерса–Кронига и монотонный рост k к синему краю;
-   8) задняя сторона подложки: r′, t′ обращённой стопки, классическая некогерентная сумма для пластины, предел f → 0, численный якобиан.
+   8) задняя сторона подложки: r′, t′ обращённой стопки, классическая некогерентная сумма для пластины, предел f → 0, численный якобиан;
+   9) спектральная полоса: синтез (свёртка интенсивностей I_p, I_s, r_p r_s* на выровненной сетке) и модель фита (второй порядок по σ) против прямой свёртки в точке;
+  10) аналитический якобиан с полосой в модели; производные по δ и d_r в нуле; конечность ε₁ Тауца–Лоренца при E = E_g; k₄₀₀ по найденной дисперсии;
+  11) таблицы кремния: Green 2008 и Aspnes–Studna воспроизводят узлы источников, кубическая интерполяция гладкая.
    Запуск: node test/verify_book.js */
 const E = require("../src/ellip_core.js");
 const PI = Math.PI;
@@ -297,6 +300,107 @@ console.log("\n7. Задняя сторона подложки: матричны
   const x0 = free.map(k => P[k]), evA = fnA(x0, true), evN = fnN(x0, true);
   let wj = 0; for (let p = 0; p < free.length; p++) { let mx = 0, nrm = 0; for (let i = 0; i < evA.r.length; i++) { mx = Math.max(mx, Math.abs(evA.J[p][i] - evN.J[p][i])); nrm = Math.max(nrm, Math.abs(evA.J[p][i])); } wj = Math.max(wj, mx / nrm); }
   check(wj < 1e-4, `численный якобиан (центральные разности, используется при включённой задней стороне) против аналитического при f → 0: max относительное расхождение ${wj.toExponential(1)}`);
+}
+
+// ================================================================ 9. Спектральная полоса: синтез и модель против прямой свёртки в точке
+console.log("\n8. Спектральная полоса прибора: усреднение интенсивностей I_p, I_s, r_p r_s* (а не N, C, S) — синтез и модель фита против прямой свёртки в точке (шаг 0.02 нм)");
+{
+  const lam = []; for (let l = 400; l <= 800; l += 2) lam.push(l);
+  const sigP = lam.map(l => 0.015 + 0.02 * Math.max(0, (650 - l) / 250) ** 2);
+  const refBand = (sub, phi, d, m, delta, dRough, bw, off, back, pts) => {           // эталон: свёртка I_p, I_s, Z в каждой точке прибора
+    const sg = bw / 2.3548, h = 0.02, half = Math.ceil(4 * sg / h), psi = [], del = [];
+    for (const l of pts) {
+      const lf = [], w = []; let ws = 0;
+      for (let j = -half; j <= half; j++) { lf.push(l + off + j * h); const g = Math.exp(-0.5 * (j * h / sg) ** 2); w.push(g); ws += g; }
+      const Nsub = E.substrateN(sub, lf), layers = E.buildLayers(lf, d, m, delta, dRough, back ? 160 : 40);
+      const R = back ? E.ncsBackside(lf, layers, Nsub, phi, back) : E.muellerFromR(...E.rhoStack(lf, layers, Nsub, phi));
+      let ip = 0, is = 0, zr = 0, zi = 0; for (let j = 0; j < lf.length; j++) { ip += R.Ip[j] * w[j]; is += R.Is[j] * w[j]; zr += R.Zr[j] * w[j]; zi += R.Zi[j] * w[j]; }
+      psi.push(0.5 * Math.acos((is - ip) / (ip + is)) * 180 / PI); let dd = Math.atan2(zi, zr) * 180 / PI; if (dd < 0) dd += 360; del.push(dd);
+    }
+    return { psi, del };
+  };
+  const cases = [["TiO₂/BK7 65°, 1017 нм, δ −0.8 %, ЭС 2.2 нм, полоса 1.2 нм", "tio2", "bk7", 65, 1017.3, -0.008, 2.2, 1.2, 0.06, null],
+    ["Nb₂O₅/BK7 60°, 1188 нм, δ +1.2 %, полоса 1.4 нм", "nb2o5", "bk7", 60, 1188.0, 0.012, 0, 1.4, 0.03, null],
+    ["HfO₂/c-Si 65°, 933 нм, δ +0.5 %, ЭС 0.9 нм, полоса 1.2 нм", "hfo2", "si", 65, 933.0, 0.005, 0.9, 1.2, 0.05, null],
+    ["ZrO₂/кварц 65°, 780 нм, задняя сторона f = 0.96, полоса 1.0 нм", "zro2", "silica", 65.01, 780.4, -0.006, 1.0, 1.0, -0.03, { f: 0.96, ds: 1e6 }]];
+  for (const [name, mat, sub, phi, d, delta, dRough, bw, off, back] of cases) {
+    const m = E.MATERIALS[mat], idx = []; for (let i = 0; i < lam.length; i += 5) idx.push(i); const pts = idx.map(i => lam[i]);
+    const ref = refBand(sub, phi, d, m, delta, dRough, bw, off, back, pts);
+    const app = E.synthesizeClean(lam, sub, phi, d, m, delta, dRough, { bw, lamOffset: off, back });
+    const old = (() => {                                                                     // прежний способ: свёртка нормированных N, C, S
+      const sg = bw / 2.3548, h = 0.02, half = Math.ceil(4 * sg / h), psi = [], del = [];
+      for (const l of pts) { const lf = [], w = []; let ws = 0; for (let j = -half; j <= half; j++) { lf.push(l + off + j * h); const g = Math.exp(-0.5 * (j * h / sg) ** 2); w.push(g); ws += g; }
+        const Nsub = E.substrateN(sub, lf), layers = E.buildLayers(lf, d, m, delta, dRough, back ? 160 : 40), R = back ? E.ncsBackside(lf, layers, Nsub, phi, back) : E.ncsFromR(...E.rhoStack(lf, layers, Nsub, phi));
+        let n = 0, c = 0, s = 0; for (let j = 0; j < lf.length; j++) { n += R.N[j] * w[j]; c += R.C[j] * w[j]; s += R.S[j] * w[j]; }
+        psi.push(0.5 * Math.acos(n / ws) * 180 / PI); let dd = Math.atan2(s, c) * 180 / PI; if (dd < 0) dd += 360; del.push(dd); }
+      return { psi, del };
+    })();
+    const lamOff = lam.map(l => l + off), mod = E.modelPsiDelta(lamOff, E.substrateN(sub, lamOff), phi, d, m, delta, dRough, back ? 160 : 40, back, { bw, subKey: sub });
+    let dA = [0, 0], dM = [0, 0], dO = [0, 0];
+    idx.forEach((i, q) => { dA = [Math.max(dA[0], Math.abs(app.psi[i] - ref.psi[q])), Math.max(dA[1], Math.abs(wrap(app.del[i] - ref.del[q])))];
+      dM = [Math.max(dM[0], Math.abs(mod.psi[i] - ref.psi[q])), Math.max(dM[1], Math.abs(wrap(mod.del[i] - ref.del[q])))];
+      dO = [Math.max(dO[0], Math.abs(old.psi[q] - ref.psi[q])), Math.max(dO[1], Math.abs(wrap(old.del[q] - ref.del[q])))]; });
+    check(dA[0] < 2e-3 && dA[1] < 1.5e-2, `${name}: синтез — max|ΔΨ| ${dA[0].toExponential(1)}°, max|ΔΔ| ${dA[1].toExponential(1)}° (свёртка N, C, S дала бы ${dO[0].toExponential(1)}°, ${dO[1].toExponential(1)}°)`);
+    check(dM[0] < 3e-3 && dM[1] < 2e-2, `   модель фита с полосой (второй порядок, три сетки λ): max|ΔΨ| ${dM[0].toExponential(1)}°, max|ΔΔ| ${dM[1].toExponential(1)}°`);
+  }
+}
+
+// ================================================================ 10. Якобиан с полосой, производные в нуле, край Тауца–Лоренца, k₄₀₀
+console.log("\n9. Аналитический якобиан с полосой в модели; производные по δ и d_r в нуле; ε₁ при E = E_g; k₄₀₀ по найденной дисперсии");
+{
+  const lam = []; for (let l = 400; l <= 800; l += 2) lam.push(l);
+  const sig = lam.map(l => 0.015 + 0.02 * Math.max(0, (650 - l) / 250) ** 2), sigD = sig.map(v => 2.2 * v);
+  const free = ["d", "A", "Auv", "Eg", "dRough", "delta", "Ak"], hs = { d: 1e-2, A: 4e-3, Auv: 4e-3, Eg: 4e-6, dRough: 4e-4, delta: 2e-5, Ak: 2e-4 };
+  for (const [subKey, phi, matKey, P, bw] of [["bk7", 65, "tio2", { d: 1017.3, A: 262, Auv: 131, Eg: 3.37, dRough: 2.2, delta: -0.008, Ak: 0.05 }, 1.2], ["si", 70, "si3n4", { d: 612.5, A: 160, Auv: 100, Eg: 4.65, dRough: 0.9, delta: 0.05, Ak: 0.3 }, 1.0]]) {
+    const mat = E.MATERIALS[matKey], cfg = { mat, subKey, Nsub: E.substrateN(subKey, lam), phi, band: { bw, subKey } };
+    const m0 = E.modelPsiDelta(lam, cfg.Nsub, phi, P.d, Object.assign({}, mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak }), P.delta, P.dRough, 40, null, cfg.band);
+    const data = { lam, psi: m0.psi.map(v => v + 0.1), del: m0.del.map(v => (v + 1) % 360), sigPsi: sig, sigDel: sigD };
+    const fn = E.makeResidJacFn(data, cfg, free, {}, 40), x0 = free.map(k => P[k]), ev = fn(x0, true);
+    let worst = 0;
+    for (let p = 0; p < free.length; p++) {
+      const h = hs[free[p]], xp = x0.slice(), xm = x0.slice(); xp[p] += h; xm[p] -= h;
+      const rp = fn(xp, false).r, rm = fn(xm, false).r; let maxAbs = 0, norm = 0;
+      for (let i = 0; i < rp.length; i++) { const num = (rp[i] - rm[i]) / (2 * h); maxAbs = Math.max(maxAbs, Math.abs(num - ev.J[p][i])); norm = Math.max(norm, Math.abs(num)); }
+      worst = Math.max(worst, maxAbs / norm);
+    }
+    check(worst < 1e-5, `${mat.name} на ${subKey}, ${phi}°, полоса ${bw} нм в модели, 7 параметров: макс. относительное расхождение с разностями ${worst.toExponential(1)}`);
+  }
+  // производные по δ и d_r в нуле (раньше — тождественный ноль)
+  const free0 = ["d", "A", "Auv", "Eg", "dRough", "delta"], mat = E.MATERIALS.tio2, cfg0 = { mat, subKey: "bk7", Nsub: E.substrateN("bk7", lam), phi: 65 };
+  const P0 = { d: 1017.3, A: 262, Auv: 131, Eg: 3.37, dRough: 0, delta: 0 };
+  const m00 = E.modelPsiDelta(lam, cfg0.Nsub, 65, P0.d, Object.assign({}, mat, { A: P0.A, Auv: P0.Auv, Eg: P0.Eg }), 0, 0, 40);
+  const data0 = { lam, psi: m00.psi.map(v => v + 0.1), del: m00.del.map(v => (v + 1) % 360), sigPsi: sig, sigDel: sigD };
+  const fn0 = E.makeResidJacFn(data0, cfg0, free0, {}, 40), x00 = free0.map(k => P0[k]), ev0 = fn0(x00, true);
+  for (const [k, h] of [["dRough", 1e-4], ["delta", 1e-5]]) {
+    const p = free0.indexOf(k), xp = x00.slice(), xm = x00.slice(); xp[p] += h; if (k !== "dRough") xm[p] -= h;
+    const rp = fn0(xp, false).r, rm = fn0(xm, false).r, hh = xp[p] - xm[p]; let maxAbs = 0, norm = 0, normJ = 0;
+    for (let i = 0; i < rp.length; i++) { const num = (rp[i] - rm[i]) / hh; maxAbs = Math.max(maxAbs, Math.abs(num - ev0.J[p][i])); norm = Math.max(norm, Math.abs(num)); normJ = Math.max(normJ, Math.abs(ev0.J[p][i])); }
+    check(normJ > 0 && maxAbs / norm < 1e-3, `∂r/∂${k} в точке ${k} = 0 (свободный параметр): max|аналит.| = ${normJ.toExponential(2)}, расхождение с разностями ${(maxAbs / norm).toExponential(1)}`);
+  }
+  const [e1, e2] = E.tlEps(3.4, 255.83, 4.0, 1.77, 3.4), [f1] = E.tlEps(3.4 + 1e-7, 255.83, 4.0, 1.77, 3.4);
+  check(isFinite(e1) && isFinite(e2) && Math.abs(e1 - f1) < 1e-4, `Тауц–Лоренц при E = E_g: ε₁ = ${e1.toFixed(6)} (конечно; при E = E_g + 10⁻⁷ эВ: ${f1.toFixed(6)}), ε₂ = ${e2}`);
+  // k₄₀₀ по найденной дисперсии: бесшумный CeO₂/Si
+  const c0 = E.MATERIALS.ceo2, mT = Object.assign({}, c0, { A: c0.A * 1.02, Auv: c0.Auv * 0.98, E0: 3.94, C: 0.91, Eg: 2.79 }); mT.Ak = E.tailAk(mT, 1.2e-3);
+  const cfgC = { mat: Object.assign({}, c0, { E0: 3.94, C: 0.91 }), subKey: "si", Nsub: E.substrateN("si", lam), phi: 65 }, prior = { dMin: 855, dMax: 945 };
+  const cl = E.synthesizeClean(lam, "si", 65, 887.5, mT, -0.010, 0, { bw: 0 });
+  const dC = { lam, psi: Array.from(cl.psi), del: Array.from(cl.del), sigPsi: sig, sigDel: sig.map((v, i) => 2.2 * v / Math.max(Math.sin(2 * cl.psi[i] * PI / 180), 0.15)) };
+  const rf = E.referenceFit(dC, cfgC, prior), fin = E.finalFit(dC, cfgC, prior, { grad: true, rough: false, abs: true }, Object.assign({}, rf.P, { delta: -0.009, Ak: E.tailAk(cfgC.mat, 1e-3), starts: rf.starts, startCosts: rf.startCosts }));
+  check(Math.abs(fin.P.k400 - 1.2e-3) < 2e-5 && Math.abs(fin.P.d - 887.5) < 1e-2, `CeO₂/c-Si без шума, хвост k₄₀₀ = 1.2·10⁻³: найдено k₄₀₀ = ${(1000 * fin.P.k400).toFixed(3)}·10⁻³ по найденной дисперсии (по справочной было бы ${(1000 * E.tailK400(cfgC.mat, fin.P.Ak)).toFixed(3)}·10⁻³), d = ${fin.P.d.toFixed(3)}, δ = ${(100 * fin.P.delta).toFixed(3)} %`);
+}
+
+// ================================================================ 11. Таблицы кремния
+console.log("\n10. Таблицы кремния: узлы источников и гладкость интерполяции");
+{
+  const g = E.substrateN("si", [400, 500, 1000]), a = E.substrateN("si_aspnes", [399.9, 495.9, 826.6]);
+  check(Math.abs(g[0][0] - 5.613) < 1e-9 && Math.abs(-g[0][1] - 0.296) < 1e-9 && Math.abs(g[1][0] - 4.294) < 1e-9 && Math.abs(g[2][0] - 3.572) < 1e-9,
+    `Green 2008: n(400) = ${g[0][0].toFixed(3)}, k(400) = ${(-g[0][1]).toFixed(3)}; n(500) = ${g[1][0].toFixed(3)}; n(1000) = ${g[2][0].toFixed(3)} — узлы источника`);
+  check(Math.abs(a[0][0] - 5.570) < 1e-3 && Math.abs(-a[0][1] - 0.387) < 1e-3 && Math.abs(a[1][0] - 4.320) < 1e-3 && Math.abs(a[2][0] - 3.673) < 1e-3,
+    `Aspnes–Studna: n(3.1 эВ) = ${a[0][0].toFixed(3)}, k = ${(-a[0][1]).toFixed(3)}; n(2.5 эВ) = ${a[1][0].toFixed(3)}; n(1.5 эВ) = ${a[2][0].toFixed(3)} — узлы источника`);
+  let jump = 0; const fine = []; for (let l = 400; l <= 1000; l += 0.5) fine.push(l); const nk = E.substrateN("si", fine);
+  for (let i = 1; i < fine.length; i++) jump = Math.max(jump, Math.abs(nk[i][0] - nk[i - 1][0]));
+  check(jump < 0.02, `кубическая интерполяция Green по 0.5 нм: макс. скачок n между соседними точками ${jump.toExponential(1)} (гладко)`);
+  const old420 = 5.010, new420 = E.substrateN("si", [420])[0][0], asp420 = E.substrateN("si_aspnes", [420])[0][0];
+  console.log(`   прежняя таблица v1.2.0 при 420 нм: n = ${old420} против Aspnes ${asp420.toFixed(3)} и Green ${new420.toFixed(3)} — расхождение 0.08–0.11 (до 0.25° по Ψ голого Si)`);
 }
 
 console.log(failures ? `\nОШИБОК: ${failures}` : "\nВсе проверки по книге пройдены");

@@ -50,7 +50,7 @@ function checkChart(id, c, exp) {
     $("exSel").value = String(i); $("exSel").dispatchEvent(new w.Event("change")); await sleep(50);
     w.location.hash = "#demo"; await sleep(50);
     const sec = await waitDemo(); const st = $("dmStatus").textContent;
-    check(/^Готово/.test(st), `построено за ${sec.toFixed(0)} с: ${st}`);
+    check(/^Готово/.test(st) && !/Пока шло построение/.test(st), `построено за ${sec.toFixed(0)} с: ${st}`);
     const R = { title: ex.title, sec, status: st, texts: {}, charts: {} };
     // --- тексты
     for (const id of ["dmBackSrc", "dmInstrSrc", "dmFingerInfo", "fingerOverlaySub", "fingerGridSub", "fingerGridNote", "dmAnchorInfo", "dmDispInfo", "dispSub", "dmBackInfo", "backFitSub", "backFitNote", "dmInstrInfo", "anchUnitsNote"]) R.texts[id] = txt($(id));

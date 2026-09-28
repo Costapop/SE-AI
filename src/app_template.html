@@ -746,16 +746,22 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     return { lam: g(lam), psi: g(psi), del: g(del), sigPsi: hasSigma ? g(sp) : lam.map(() => s0), sigDel: hasSigma ? g(sd) : lam.map(() => 2 * s0), hasSigma };
   }
   window.__parseRows = parseRows;
-  function readCfg() {
+  /** Условия анализа по текущим полям страницы «Анализ» для спектра data: {cfg, prior, nuis} (без побочных эффектов). */
+  function buildCfg(data) {
     const mat = { A: +$('mA').value, E0: +$('mE0').value, C: +$('mC').value, Eg: +$('mEg').value, Auv: +$('mAuv').value, Euv: +$('mEuv').value, name: E.MATERIALS[matSel.value].name };
     const subKey = subSel.value, phi = +$('phi').value, dNom = +$('dNom').value, rng = +$('dRange').value / 100;
     const bw = Math.max(0, +$('bw').value || 0);
     // band — паспортная полоса прибора в модели окончательного фита (второй порядок по σ); опорный фит и обучение идут без неё (отпечаток остатка)
-    S.cfg = { mat, subKey, Nsub: E.substrateN(subKey, S.data.lam), phi, subDel: null, back: readBack(), band: bw > 0 ? { bw, subKey } : null };
-    S.prior = { dMin: dNom * (1 - rng), dMax: dNom * (1 + rng) };
+    const cfg = { mat, subKey, Nsub: E.substrateN(subKey, data.lam), phi, subDel: null, back: readBack(), band: bw > 0 ? { bw, subKey } : null };
+    const prior = { dMin: dNom * (1 - rng), dMax: dNom * (1 + rng) };
     // bwErr, offErr — неопределённости полосы и шкалы λ, как в генераторе обучения (±0.3 нм, ±0.1 нм); используются в оценке систематики окончательного фита
-    S.nuis = { deltaMax: Math.min(0.20, Math.max(0.005, (+$('deltaMax').value || 5) / 100)), roughMax: 3.0, kMax: Math.min(E.K400_MAX, Math.max(2e-4, (+$('kMax').value || 5) / 1000)), bw, phiErr: +$('phiErr').value || 0, backFerr: Math.min(1, Math.max(0, +$('backFerr').value || 0)), bwErr: 0.3, offErr: 0.1 };
-    const rg = E.SUBSTRATES[subKey].range, lam = S.data.lam;
+    const nuis = { deltaMax: Math.min(0.20, Math.max(0.005, (+$('deltaMax').value || 5) / 100)), roughMax: 3.0, kMax: Math.min(E.K400_MAX, Math.max(2e-4, (+$('kMax').value || 5) / 1000)), bw, phiErr: +$('phiErr').value || 0, backFerr: Math.min(1, Math.max(0, +$('backFerr').value || 0)), bwErr: 0.3, offErr: 0.1 };
+    return { cfg, prior, nuis };
+  }
+  /** Условия шагов 1–4 (S.cfg, S.prior, S.nuis) — читаются при запуске шага 1. */
+  function readCfg() {
+    const c = buildCfg(S.data); S.cfg = c.cfg; S.prior = c.prior; S.nuis = c.nuis;
+    const subKey = S.cfg.subKey, rg = E.SUBSTRATES[subKey].range, lam = S.data.lam;
     $('subRangeNote').textContent = rg && (lam[0] < rg[0] - 1e-9 || lam[lam.length - 1] > rg[1] + 1e-9) ? `Внимание: таблица подложки «${E.SUBSTRATES[subKey].name}» задана для ${fmt(rg[0], 0)}–${fmt(rg[1], 0)} нм, спектр выходит за её пределы (${fmt(lam[0], 0)}–${fmt(lam[lam.length - 1], 0)} нм) — вне таблицы n, k фиксируются на краевых значениях.` : '';
   }
   /** Заданная (априорная) задняя сторона подложки: {f, ds (нм)} или null, если флажок в панели «Спектр» снят. */
@@ -988,7 +994,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     const pm = (k, v, e, digits, scale) => `${fmt(scale * v, digits)} ± ${fmt(scale * e, digits)}${fin.sys ? ` <span class="note">(сист. ± ${fmt(scale * sysOf(k), digits)})</span>` : ''}`;
     const c = modelCurves(fin.P, S.cfg.band); drawSpectrum({ label: 'окончательная модель', psi: c.psi, del: c.del });
     drawResidual('chResFin', fin.resid, 'Остаток окончательного фита'); drawFinger(S.ref.resid, fin.resid);
-    const mRef = matOf(S.ref.P), mFin = matOf(fin.P), nkRef = E.filmNK(S.data.lam, mRef), nkFin = E.filmNK(S.data.lam, mFin);
+    const mRef = matOf(S.ref.P), mFin = matOf(fin.P), nkRef = E.filmNK(S.data.lam, mRef), nkFin = E.filmNK(S.data.lam, mFin); S.finMat = mFin;   // снимок дисперсии окончательного фита (для иллюстраций при изменённых условиях)
     const curves = [{ label: 'опорный фит', n: nkRef.n, k: nkRef.k }, { label: 'окончательный фит', n: nkFin.n, k: nkFin.k }];
     const modelName = (flags.grad || flags.rough || flags.abs) ? ['однородная плёнка', flags.grad ? 'градиент' : null, flags.rough ? 'EMA-слой' : null, flags.abs ? 'хвост поглощения' : null].filter(Boolean).join(' + ') : 'однородная плёнка (дефектов нет)';
     const nAt = (m, l) => E.filmNK([l], m).n[0], kAt = (m, l) => E.filmNK([l], m).k[0];
@@ -1284,7 +1290,10 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   window.addEventListener('resize', () => { for (const c of Object.values(S.charts)) c.resize(); });
 
   // ================================================================ страница «Иллюстрации»
-  const DM = { res: {}, base: null, ref: null, building: false, stale: true, staleAgain: null, view: 'plane', scale: 'common', anchUnits: 'deg', backUnits: 'deg' };
+  // DM.cfg / DM.prior — условия иллюстраций: снимок полей страницы «Анализ» на момент построения, отдельный от DM.cfg / DM.prior шагов 1–4
+  const DM = { res: {}, base: null, ref: null, cfg: null, prior: null, building: false, stale: true, staleAgain: null, view: 'plane', scale: 'common', anchUnits: 'deg', backUnits: 'deg' };
+  const dmCfgRef = () => Object.assign({}, DM.cfg, { band: null });          // как dmCfgRef(), но от условий иллюстраций
+  const dmMatOf = (P) => Object.assign({}, DM.cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak || 0 });
   /** Варианты дефектов для иллюстраций: фиксированный порядок и фиксированные цвета (цвет следует за сущностью). */
   const DEFS = [
     { key: 'hom', name: 'однородная плёнка', short: 'однородная плёнка', g: 0, r: 0, a: 0, color: '--muted', cls: 0 },
@@ -1332,19 +1341,19 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   function ensureRef() {
     if (!S.ref && S.data) step1();
     if (S.ref && !S.cfgDirty) return { P: S.ref.P, resid: S.ref.resid, feat: S.refFeat, own: false };
-    const ref = E.referenceFit(S.data, cfgRef(), S.prior);
-    return { P: ref.P, resid: ref.resid, feat: E.featureVector(S.data, S.cfg, ref.resid), own: true };
+    const ref = E.referenceFit(S.data, dmCfgRef(), DM.prior);
+    return { P: ref.P, resid: ref.resid, feat: E.featureVector(S.data, DM.cfg, ref.resid), own: true };
   }
   /** Базовая плёнка иллюстраций: толщина и дисперсия без дефектов. */
   function dmBase() {
-    readCfg();
+    const c = buildCfg(S.data); DM.cfg = c.cfg; DM.prior = c.prior;           // условия иллюстраций — по текущим полям, DM.cfg шагов 1–4 не трогаем
     const src = $('dmSource').value; let d, mat, label;
     if (src === 'truth' && S.example && S.example.truth) { const Tt = S.example.truth; d = Tt.d; mat = Object.assign({}, Tt.mat, { Ak: 0 }); label = 'истина образца'; }
-    else if (src === 'hand' || (src === 'truth')) { d = +$('dNom').value; mat = Object.assign({}, S.cfg.mat, { Ak: 0 }); label = src === 'truth' ? 'справочник (истина неизвестна)' : 'справочник и номинальная толщина'; }
-    else { DM.ref = ensureRef(); d = DM.ref.P.d; mat = matOf(DM.ref.P); label = DM.ref.own ? 'опорный фит текущего спектра (пересчитан для текущих условий)' : 'опорный фит текущего спектра'; }
+    else if (src === 'hand' || (src === 'truth')) { d = +$('dNom').value; mat = Object.assign({}, DM.cfg.mat, { Ak: 0 }); label = src === 'truth' ? 'справочник (истина неизвестна)' : 'справочник и номинальная толщина'; }
+    else { DM.ref = ensureRef(); d = DM.ref.P.d; mat = dmMatOf(DM.ref.P); label = DM.ref.own ? 'опорный фит текущего спектра (пересчитан для текущих условий)' : 'опорный фит текущего спектра'; }
     if (!DM.ref && S.data && S.ref) DM.ref = ensureRef();                      // отпечаток измеренного спектра и раздел «Дисперсия» — по тому же опорному фиту
     const lam = S.data.lam;
-    return { d, mat, label, cfg: S.cfg, lam, sig: { psi: S.data.sigPsi, del: S.data.sigDel }, lamF: linspace(lam[0], lam[lam.length - 1], 401) };
+    return { d, mat, label, cfg: DM.cfg, lam, sig: { psi: S.data.sigPsi, del: S.data.sigDel }, lamF: linspace(lam[0], lam[lam.length - 1], 401) };
   }
   /** Спектр плёнки с дефектами на сетке измерения: чистый или с эффектами прибора из симулятора. */
   function dmSynth(base, delta, dRough, k400, instr) {
@@ -1368,19 +1377,19 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   function dmFingerOne(base, i) {
     const c = E.CLASSES[i], sz = dmSizes();
     const dd = dmSynth(base, c.g * sz.delta, c.r ? sz.rough : 0, c.a ? sz.k400 : 0, $('dmInstr').checked);
-    const fit = E.referenceFit(dd, cfgRef(), S.prior);
-    const x = E.featureVector(dd, S.cfg, fit.resid);
+    const fit = E.referenceFit(dd, dmCfgRef(), DM.prior);
+    const x = E.featureVector(dd, DM.cfg, fit.resid);
     (DM.res.finger = DM.res.finger || [])[i] = { cls: c, resid: fit.resid, chi2: fit.chi2, d: fit.P.d, ch: chansOf(x) };
   }
   function fingerRange() {
-    const R = DM.res.finger || []; let mp = 0, md = 0; const n = S.data.lam.length;
+    const R = DM.res.finger || []; let mp = 0, md = 0; const n = DM.base.lam.length;
     R.forEach(r => { if (!r) return; mp = Math.max(mp, maxAbs(r.resid.slice(0, n))); md = Math.max(md, maxAbs(r.resid.slice(n))); });
     if (DM.ref) { mp = Math.max(mp, maxAbs(DM.ref.resid.slice(0, n))); md = Math.max(md, maxAbs(DM.ref.resid.slice(n))); }
     return { psi: niceMax(mp * 1.05), del: niceMax(md * 1.05) };
   }
   function renderFinger() {
     const R = DM.res.finger; if (!R || !R.length) return;
-    const lam = S.data.lam, n = lam.length, sz = dmSizes(), rng = fingerRange();
+    const lam = DM.base.lam, n = lam.length, sz = dmSizes(), rng = fingerRange();
     const tr = (r) => Array.from(lam, (l, i) => ({ x: r[i], y: r[n + i], lam: l }));
     $('fingerOverlaySub').textContent = `плёнка: ${DM.base.label}, d = ${fmt(DM.base.d, 1)} нм; ${$('dmInstr').checked ? 'с эффектами прибора' : 'без эффектов прибора'}`;
     $('fingerGridSub').textContent = `δ = ±${fmt(100 * sz.delta, 1)} %, слой ${fmt(sz.rough, 1)} нм, k₄₀₀ = ${fmtK(sz.k400, 1)}`;
@@ -1412,7 +1421,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     }));
     $('fingerRamp').style.display = DM.view === 'plane' ? '' : 'none';
     const R1 = R[1], Ra = R[6], Rr = R[3];
-    $('dmFingerInfo').innerHTML = T(`Плёнка: <b>${DM.base.label}</b>, d = ${fmt(DM.base.d, 2)} нм, ${S.cfg.mat.name}, подложка — ${subShort(S.cfg.subKey)}, угол ${fmt(S.cfg.phi, 2)}°${S.cfg.back ? `, задняя сторона (доля ${fmt(S.cfg.back.f, 2)})` : ''}. Шум — σ(λ) текущего измерения. Каналы якорей однородного фита: у градиента +${fmt(100 * sz.delta, 1)} % — Ψ в HW-якорях ${fmt(R1.ch.psiHW, 1)} σ; у шероховатости ${fmt(sz.rough, 1)} нм — |Δ| в HW ${fmt(Rr.ch.delHW, 1)} σ; у поглощения k₄₀₀ = ${fmtK(sz.k400, 1)} — перепад Ψ синие − красные якоря ${fmt(Ra.ch.psiHWtrend, 1)} σ.${DM.ref ? ` Измеренный спектр: RMS Ψ/Δ ${fmt(chan(DM.ref.feat, 'rmsPsi'), 1)}/${fmt(chan(DM.ref.feat, 'rmsDel'), 1)} σ, похож на: ${looksLike(chansOf(DM.ref.feat))}.` : ''}`);
+    $('dmFingerInfo').innerHTML = T(`Плёнка: <b>${DM.base.label}</b>, d = ${fmt(DM.base.d, 2)} нм, ${DM.cfg.mat.name}, подложка — ${subShort(DM.cfg.subKey)}, угол ${fmt(DM.cfg.phi, 2)}°${DM.cfg.back ? `, задняя сторона (доля ${fmt(DM.cfg.back.f, 2)})` : ''}. Шум — σ(λ) текущего измерения. Каналы якорей однородного фита: у градиента +${fmt(100 * sz.delta, 1)} % — Ψ в HW-якорях ${fmt(R1.ch.psiHW, 1)} σ; у шероховатости ${fmt(sz.rough, 1)} нм — |Δ| в HW ${fmt(Rr.ch.delHW, 1)} σ; у поглощения k₄₀₀ = ${fmtK(sz.k400, 1)} — перепад Ψ синие − красные якоря ${fmt(Ra.ch.psiHWtrend, 1)} σ.${DM.ref ? ` Измеренный спектр: RMS Ψ/Δ ${fmt(chan(DM.ref.feat, 'rmsPsi'), 1)}/${fmt(chan(DM.ref.feat, 'rmsDel'), 1)} σ, похож на: ${looksLike(chansOf(DM.ref.feat))}.` : ''}`);
   }
   document.querySelectorAll('#fingerView button').forEach(b => b.addEventListener('click', () => { DM.view = b.dataset.v; document.querySelectorAll('#fingerView button').forEach(x => x.classList.toggle('on', x === b)); renderFinger(); }));
   document.querySelectorAll('#fingerScale button').forEach(b => b.addEventListener('click', () => { DM.scale = b.dataset.s; document.querySelectorAll('#fingerScale button').forEach(x => x.classList.toggle('on', x === b)); renderFinger(); }));
@@ -1436,7 +1445,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     const diffHom = lamF.map((l, i) => E.wrap(hom.del[i] - sub.del[i])); let phHom = unwrapDeg(diffHom); const sign = phHom[phHom.length - 1] < phHom[0] ? -1 : 1;
     const phaseOf = (del) => Array.from(unwrapDeg(lamF.map((l, i) => E.wrap(del[i] - sub.del[i]))), v => sign * v);
     variants.forEach(v => { v.phase = phaseOf(v.del); });
-    const sigAt = (xs, key) => xs.map(x => E.interp(x, S.data.lam, S.data[key]));
+    const sigAt = (xs, key) => xs.map(x => E.interp(x, base.lam, key === 'sigPsi' ? base.sig.psi : base.sig.del));
     const pat = { HW: { lam: HW, sigPsi: sigAt(HW, 'sigPsi'), sigDel: sigAt(HW, 'sigDel'), psi: [], del: [] }, QW: { lam: QW, sigPsi: sigAt(QW, 'sigPsi'), sigDel: sigAt(QW, 'sigDel'), psi: [], del: [] } };
     // Значения в якорях считаются моделью точно в λ якорей, а не интерполяцией с сетки 1 нм: у однородной плёнки Ψ − Ψ_подл в HW-якоре —
     // квадратичный нуль, и линейная интерполяция давала до 0.15° (≈7 σ) вместо нуля. Ψ в QW-якорях сравнивается с однородной плёнкой
@@ -1490,17 +1499,17 @@ const EXAMPLES = /*__EXAMPLES__*/[];
       : 'У однородной прозрачной плёнки отклонения в HW равны нулю (плёнка «исчезает»).';
     $('dmAnchorTable').innerHTML = T(`<h3>Сводка по якорям (в градусах)</h3><table><thead><tr><th>вариант плёнки</th><th class="num">⟨Ψ − Ψ<sub>подл</sub>⟩ в HW</th><th class="num">перепад синие − красные HW</th><th class="num">⟨Ψ − Ψ<sub>однор</sub>⟩ в QW</th><th class="num">⟨|Δ − Δ<sub>подл</sub>|⟩ в HW</th><th class="num">⟨|Δ − Δ<sub>подл</sub> − 180°|⟩ в QW</th></tr></thead><tbody>${rowsA.join('')}</tbody></table><p class="note">HW-якорей ${A.HW.length}, QW-якорей ${A.QW.length}; значения — точные значения модели в λ якорей. Те же величины, взятые от остатка опорного фита в единицах σ, образуют каналы якорей вектора признаков ИИ. ${homNote} У градиента Ψ-отклонение почти постоянно по диапазону, у поглощения растёт к синему краю, у шероховатости выражено Δ-отклонение.</p>`);
     const anchList = A.HW.length ? `Найдено HW-якорей: ${A.HW.length} (${A.HW.map(x => fmt(x, 0)).join(', ')} нм), QW-якорей: ${A.QW.length}.` : 'Полуволновых якорей не найдено (плёнка тонкая или диапазон узкий): паттерны пусты.';
-    $('dmAnchorInfo').innerHTML = T(`Плёнка: <b>${DM.base.label}</b>, d = ${fmt(DM.base.d, 2)} нм, ${S.cfg.mat.name}; подложка — ${subShort(S.cfg.subKey)}${S.cfg.back ? ' с задней стороной' : ''}. ${anchList}${A.absorbs ? ' Материал поглощает на синем краю: однородная плёнка касается кривой подложки только в красных HW-якорях (см. примечание к сводке).' : ''}`);
+    $('dmAnchorInfo').innerHTML = T(`Плёнка: <b>${DM.base.label}</b>, d = ${fmt(DM.base.d, 2)} нм, ${DM.cfg.mat.name}; подложка — ${subShort(DM.cfg.subKey)}${DM.cfg.back ? ' с задней стороной' : ''}. ${anchList}${A.absorbs ? ' Материал поглощает на синем краю: однородная плёнка касается кривой подложки только в красных HW-якорях (см. примечание к сводке).' : ''}`);
   }
   document.querySelectorAll('#anchUnits button').forEach(b => b.addEventListener('click', () => { DM.anchUnits = b.dataset.u; document.querySelectorAll('#anchUnits button').forEach(x => x.classList.toggle('on', x === b)); renderAnchors(); }));
 
   // ---------------------------------------------------------------- 3. дисперсия
   function dmDisp(base) {
     const lamF = base.lamF, mats = [];
-    mats.push({ key: 'hand', label: 'справочник', m: Object.assign({}, S.cfg.mat, { Ak: 0 }), color: '--muted', dash: [6, 4], d: NaN });
+    mats.push({ key: 'hand', label: 'справочник', m: Object.assign({}, DM.cfg.mat, { Ak: 0 }), color: '--muted', dash: [6, 4], d: NaN });
     if (S.example && S.example.truth) mats.push({ key: 'truth', label: 'истина', m: S.example.truth.mat, color: '--text', dash: null, d: S.example.truth.d });
-    if (DM.ref) mats.push({ key: 'ref', label: DM.ref.own ? 'опорный фит (текущие условия)' : 'опорный фит', m: matOf(DM.ref.P), color: '--c-ref', dash: null, d: DM.ref.P.d });
-    if (S.fin) mats.push({ key: 'fin', label: S.cfgDirty ? 'окончательный фит (прежние условия)' : 'окончательный фит', m: matOf(S.fin.P), color: '--c-fin', dash: null, d: S.fin.P.d });
+    if (DM.ref) mats.push({ key: 'ref', label: DM.ref.own ? 'опорный фит (текущие условия)' : 'опорный фит', m: dmMatOf(DM.ref.P), color: '--c-ref', dash: null, d: DM.ref.P.d });
+    if (S.fin) mats.push({ key: 'fin', label: S.cfgDirty ? 'окончательный фит (прежние условия)' : 'окончательный фит', m: S.finMat || matOf(S.fin.P), color: '--c-fin', dash: null, d: S.fin.P.d });   // снимок дисперсии фита, а не смесь с текущими E₀, C
     for (const c of mats) { const nk = E.filmNK(lamF, c.m); c.n = nk.n; c.k = nk.k; c.kTail = c.m.Ak > 0 ? E.filmNK(lamF, Object.assign({}, c.m, { Ak: 0 })).k.map((k0, i) => nk.k[i] - k0) : null; c.k400 = c.m.Ak > 0 ? E.tailK400(c.m, c.m.Ak) : 0; }
     const Eg = linspace(1.0, 6.5, 276), HC = E.HC;
     for (const c of mats) { c.e2 = Eg.map(e => { const v = E.tlEps(e, c.m.A, c.m.E0, c.m.C, c.m.Eg)[1]; return v > 1e-7 ? v : null; }); c.e2tail = c.m.Ak > 0 ? Eg.map(e => { const v = E.tlEps(e, c.m.Ak, c.m.E0, c.m.C, E.TAIL_ET)[1]; return v > 1e-7 ? v : null; }) : null; }
@@ -1538,7 +1547,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     const rows = [['Толщина d, нм', c => isFinite(c.d) ? fmt(c.d, 2) : '—'], ['A, эВ', c => fmt(c.m.A, 2)], ['E₀, эВ', c => fmt(c.m.E0, 3)], ['C, эВ', c => fmt(c.m.C, 3)], ['E_g, эВ', c => fmt(c.m.Eg, 3)], ['A_uv, эВ²', c => fmt(c.m.Auv, 2)], ['E_uv, эВ', c => fmt(c.m.Euv, 2)],
       ['A_k хвоста, эВ', c => c.m.Ak > 0 ? fmt(c.m.Ak, 4) : '0'], ['k₄₀₀ хвоста', c => c.m.Ak > 0 ? fmtK(c.k400, 2) : '0'], ['n(550 нм)', c => fmt(nAt(c.m, 550), 4)], [`k(${fmt(lam0, 0)} нм)`, c => fmt(kAt(c.m, lam0), 5)], ['k(550 нм)', c => fmt(kAt(c.m, 550), 6)]];
     $('dmDispTable').innerHTML = T(`<h3>Параметры дисперсии</h3><table><thead><tr><th>параметр</th>${cols.map(c => `<th class="num"><span class="dot" style="background:${css(c.color)}"></span> ${c.label}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr><td>${r[0]}</td>${cols.map(c => `<td class="num">${r[1](c)}</td>`).join('')}</tr>`).join('')}</tbody></table><p class="note">В фите свободны d, A, A_uv, E_g (и A_k при включённом поглощении); E₀, C, E_uv фиксированы справочными значениями. Истина известна только для встроенных и симулированных образцов.</p>`);
-    $('dmDispInfo').innerHTML = T(`Материал: <b>${S.cfg.mat.name}</b>. ${D.mats.length === 1 ? 'Пока показан только справочник: выполните опорный и окончательный фиты на странице «Анализ», чтобы сравнить найденную дисперсию с истиной.' : `Показаны: ${D.mats.map(c => c.label).join(', ')}.`}`);
+    $('dmDispInfo').innerHTML = T(`Материал: <b>${DM.cfg.mat.name}</b>. ${D.mats.length === 1 ? 'Пока показан только справочник: выполните опорный и окончательный фиты на странице «Анализ», чтобы сравнить найденную дисперсию с истиной.' : `Показаны: ${D.mats.map(c => c.label).join(', ')}.`}`);
   }
 
   // ---------------------------------------------------------------- 4. задняя сторона подложки
@@ -1552,8 +1561,8 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     const dPsi = Array.from(lam, (l, i) => film1.psi[i] - film0.psi[i]), dDel = Array.from(lam, (l, i) => E.wrap(film1.del[i] - film0.del[i]));
     // фит однородной плёнки без учёта задней стороны
     const dd = { lam, psi: Array.from(film1.psi), del: Array.from(film1.del), sigPsi: base.sig.psi, sigDel: base.sig.del };
-    const cfgNo = Object.assign({}, cfgRef(), { subKey, Nsub, back: null, subDel: null });
-    const fitNo = E.referenceFit(dd, cfgNo, S.prior); const x = E.featureVector(dd, cfgNo, fitNo.resid);
+    const cfgNo = Object.assign({}, dmCfgRef(), { subKey, Nsub, back: null, subDel: null });
+    const fitNo = E.referenceFit(dd, cfgNo, DM.prior); const x = E.featureVector(dd, cfgNo, fitNo.resid);
     DM.res.back = { lam, subKey, f, ds, film0: { psi: Array.from(film0.psi), del: Array.from(film0.del) }, film1: { psi: Array.from(film1.psi), del: Array.from(film1.del) }, sub0: { psi: Array.from(sub0.psi), del: Array.from(sub0.del) }, sub1: { psi: Array.from(sub1.psi), del: Array.from(sub1.del) }, depol, dPsi, dDel, fitNo: { resid: fitNo.resid, d: fitNo.P.d, chi2: fitNo.chi2, ch: chansOf(x) } };
   }
   function renderBack() {
@@ -1566,7 +1575,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
       { label: 'плёнка без задней стороны', data: delPts(lam, B.film0.del), borderColor: css('--muted'), borderWidth: 1.6, pointRadius: 0, spanGaps: false }, { label: `плёнка, ${fL}`, data: delPts(lam, B.film1.del), borderColor: css('--accent'), borderWidth: 2.2, pointRadius: 0, spanGaps: false },
       { label: 'подложка без задней стороны', data: delPts(lam, B.sub0.del), borderColor: css('--muted'), borderWidth: 1.4, borderDash: [6, 4], pointRadius: 0, spanGaps: false }, { label: `подложка, ${fL}`, data: delPts(lam, B.sub1.del), borderColor: css('--accent'), borderWidth: 1.6, borderDash: [6, 4], pointRadius: 0, spanGaps: false }] }, options: o }); });
     makeChart('cBackDiff', () => { const o = baseOpts('Длина волны, нм', sigU ? 'разность, σ' : 'разность, град'); o.plugins.guides = { yLines: [{ y: 0, color: css('--line') }] };
-      const dp = B.dPsi.map((v, i) => sigU ? v / S.data.sigPsi[i] : v), ddl = B.dDel.map((v, i) => sigU ? v / S.data.sigDel[i] : v);
+      const dp = B.dPsi.map((v, i) => sigU ? v / DM.base.sig.psi[i] : v), ddl = B.dDel.map((v, i) => sigU ? v / DM.base.sig.del[i] : v);
       return new Chart($('cBackDiff'), { type: 'line', data: { datasets: [{ label: 'ΔΨ (с задней стороной − без)', data: pts(lam, dp), borderColor: css('--psi'), borderWidth: 1.8, pointRadius: 0 }, { label: 'ΔΔ (с задней стороной − без)', data: pts(lam, ddl), borderColor: css('--del'), borderWidth: 1.8, pointRadius: 0 }] }, options: o }); });
     makeChart('cBackDepol', () => { const o = baseOpts('Длина волны, нм', 'деполяризация, %'); o.plugins.legend.display = false; o.scales.y.min = 0; return new Chart($('cBackDepol'), { type: 'line', data: { datasets: [{ label: `степень деполяризации плёнки, ${fL}`, data: pts(lam, B.depol), borderColor: css('--accent'), backgroundColor: 'rgba(30,110,142,0.10)', fill: true, borderWidth: 2, pointRadius: 0 }] }, options: o }); });
     makeChart('cBackFit', () => { const o = baseOpts('Длина волны, нм', 'остаток, σ'); o.plugins.guides = { yLines: [{ y: 0, color: css('--line') }] }; const r = B.fitNo.resid;
@@ -1578,7 +1587,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
       ? `Задняя сторона здесь ничего не меняет (${B.f > 0 ? (absorbing ? 'подложка поглощает: свет задней грани гасится в её толще' : 'вклад ниже 10⁻³°') : 'доля f = 0'}), поэтому однородный фит без неё воспроизводит базовую плёнку: d = ${fmt(B.fitNo.d, 2)} нм при ${fmt(DM.base.d, 2)} нм, χ²/ν = ${fmt(B.fitNo.chi2, 1)}, ложных дефектов не возникает. Чтобы увидеть эффект, выберите прозрачную подложку и долю f > 0 и нажмите «Пересчитать».`
       : `Однородный фит без задней стороны находит d = ${fmt(B.fitNo.d, 2)} нм при d базовой плёнки ${fmt(DM.base.d, 2)} нм (ошибка ${fmt(B.fitNo.d - DM.base.d, 2)} нм), χ²/ν = ${fmt(B.fitNo.chi2, 1)}; остаток похож на: ${looksLike(B.fitNo.ch)}. Так задняя сторона, не учтённая в модели, превращается в ложные дефекты — поэтому её доля задаётся из независимого измерения и входит в модель, обучение и симулятор.`);
     const effect = negligible ? 'Задняя сторона спектр не меняет (изменения Ψ ниже 10⁻³°, Δ — ниже 10⁻²°, деполяризации нет).' : `Задняя сторона меняет Ψ до ${fmt(mp, 2)}° и Δ до ${fmt(md, 1)}°; степень деполяризации до ${fmt(mdp, 1)} %.`;
-    $('dmBackInfo').innerHTML = T(`Подложка — <b>${subName}</b>${absorbing && negligible ? ' (поглощает: вклад задней стороны гасится в её толще)' : ''}, толщина ${fmt(B.ds / 1e6, 2)} мм, доля ${fmt(B.f, 2)}; плёнка — ${DM.base.label}, d = ${fmt(DM.base.d, 1)} нм, угол ${fmt(S.cfg.phi, 2)}°. ${effect}${S.cfg.back ? '' : ' На странице «Анализ» задняя сторона сейчас выключена — здесь она включена только для иллюстрации.'}`);
+    $('dmBackInfo').innerHTML = T(`Подложка — <b>${subName}</b>${absorbing && negligible ? ' (поглощает: вклад задней стороны гасится в её толще)' : ''}, толщина ${fmt(B.ds / 1e6, 2)} мм, доля ${fmt(B.f, 2)}; плёнка — ${DM.base.label}, d = ${fmt(DM.base.d, 1)} нм, угол ${fmt(DM.cfg.phi, 2)}°. ${effect}${DM.cfg.back ? '' : ' На странице «Анализ» задняя сторона сейчас выключена — здесь она включена только для иллюстрации.'}`);
     backSrcInfo();
   }
   document.querySelectorAll('#backUnits button').forEach(b => b.addEventListener('click', () => { DM.backUnits = b.dataset.u; document.querySelectorAll('#backUnits button').forEach(x => x.classList.toggle('on', x === b)); renderBack(); }));
@@ -1587,7 +1596,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   // Поля раздела заполняются со страницы «Анализ» (подложка спектра, заданная доля или 1, толщина подложки), пока их не изменить здесь;
   // изменённое поле закрепляется за разделом, строка под полями показывает источник, кнопка «Как на «Анализе»» снимает закрепление.
   const BACK_IDS = ['dmBackSub', 'dmBackF', 'dmBackDs'];
-  function backFromAnalysis() {                                               // по текущим полям страницы «Анализ» (не по S.cfg последнего фита)
+  function backFromAnalysis() {                                               // по текущим полям страницы «Анализ» (не по DM.cfg последнего фита)
     const back = readBack();
     if ($('dmBackSub').dataset.user !== '1') $('dmBackSub').value = subSel.value;
     if ($('dmBackF').dataset.user !== '1') $('dmBackF').value = back ? back.f : 1;
@@ -1639,11 +1648,11 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     else { const rng = E.makeRng(seed); const c = E.synthesizeClean(lam, cfg.subKey, cfg.phi + dphi, base.d, m, 0, 0, { bw, lamOffset: off, back: cfg.back }); s = E.applyNoise(c, lam, { driftPsi: [drP, rng.range(-1, 1) * drP], driftDel: [drD, rng.range(-1, 1) * drD], sigPsi: base.sig.psi, sigDel: base.sig.del }, rng); }
     const rp = Array.from(lam, (l, i) => (s.psi[i] - clean.psi[i]) / base.sig.psi[i]), rd = Array.from(lam, (l, i) => E.wrap(s.del[i] - clean.del[i]) / base.sig.del[i]);
     const dd = { lam, psi: Array.from(s.psi), del: Array.from(s.del), sigPsi: base.sig.psi, sigDel: base.sig.del };
-    const fit = E.referenceFit(dd, cfgRef(), S.prior), x = E.featureVector(dd, S.cfg, fit.resid);
+    const fit = E.referenceFit(dd, dmCfgRef(), DM.prior), x = E.featureVector(dd, DM.cfg, fit.resid);
     DM.res.instr.items.push({ eff, param: eff.param(P), raw: { rp, rd }, fit: { resid: fit.resid, d: fit.P.d, chi2: fit.chi2, ch: chansOf(x) }, rmsRaw: { psi: rmsOf(rp), del: rmsOf(rd) }, rmsFit: { psi: rmsOf(fit.resid.slice(0, lam.length)), del: rmsOf(fit.resid.slice(lam.length)) } });
   }
   function renderInstr() {
-    const I = DM.res.instr; if (!I || !I.items.length) return; const lam = S.data.lam, n = lam.length;
+    const I = DM.res.instr; if (!I || !I.items.length) return; const lam = DM.base.lam, n = lam.length;
     const mini = (gridId, prefix, getPD) => {
       const grid = $(gridId); grid.innerHTML = I.items.map((it, i) => { const pd = getPD(it); return `<div class="mini"><div class="mini-title"><span>${it.eff.name}</span></div><div class="mini-sub">${esc(it.param)}<br>RMS Ψ/Δ ${fmt(pd.rmsPsi, 1)}/${fmt(pd.rmsDel, 1)} σ${pd.extra ? ' · ' + pd.extra : ''}</div><div class="chart"><canvas id="${prefix}${i}"></canvas></div></div>`; }).join('');
       I.items.forEach((it, i) => makeChart(prefix + i, () => { const pd = getPD(it); const o = baseOpts('Длина волны, нм', 'σ'); o.plugins.legend.display = i === 0; o.plugins.guides = { yLines: [{ y: 0, color: css('--line') }] }; o.scales.x.ticks.maxTicksLimit = 6; o.scales.y.ticks.maxTicksLimit = 6;
@@ -1660,13 +1669,13 @@ const EXAMPLES = /*__EXAMPLES__*/[];
         { label: 'остаток опорного фита (после фита)', data: I.items.map(it => both(it.rmsFit.psi, it.rmsFit.del)), backgroundColor: css('--accent'), maxBarThickness: 24, borderRadius: 4 }] }, options: Object.assign(o, { parsing: true }) });
     });
     $('dmInstrTable').innerHTML = T(`<h3>Сводка по эффектам прибора</h3><table><thead><tr><th>эффект</th><th>параметр</th><th class="num">RMS до фита Ψ / Δ, σ</th><th class="num">RMS после фита Ψ / Δ, σ</th><th class="num">Δd, нм</th><th class="num">χ²/ν</th><th class="num">каналы остатка Ψ<sub>HW</sub> · |Δ|<sub>HW</sub> · перепад, σ</th><th>на что похож остаток</th></tr></thead><tbody>${I.items.map(it => `<tr><td>${it.eff.name}</td><td class="note">${esc(it.param)}</td><td class="num">${fmt(it.rmsRaw.psi, 1)} / ${fmt(it.rmsRaw.del, 1)}</td><td class="num">${fmt(it.rmsFit.psi, 1)} / ${fmt(it.rmsFit.del, 1)}</td><td class="num">${fmt(it.fit.d - DM.base.d, 2)}</td><td class="num">${fmt(it.fit.chi2, 1)}</td><td class="num">${fmt(it.fit.ch.psiHW, 1)} · ${fmt(it.fit.ch.delHW, 1)} · ${fmt(it.fit.ch.psiHWtrend, 1)}</td><td class="note">${looksLike(it.fit.ch)}</td></tr>`).join('')}</tbody></table><p class="note">Δd — ошибка толщины, которую эффект наводит в опорном фите. «Похож на» — по каналам якорей остатка (порог 3 σ): ошибка угла сдвигает Ψ в HW-якорях, как градиент; полоса гасит контраст полос к синему краю, как поглощение; сдвиг шкалы и дрейф поглощаются толщиной и дисперсией почти без следа; шум даёт белый остаток. Обучающие остатки ИИ содержат все эти эффекты как мешающие факторы, поэтому классификатор учится отличать их от дефектов.</p>`);
-    $('dmInstrInfo').innerHTML = T(`Идеальный спектр: однородная плёнка (${DM.base.label}, d = ${fmt(DM.base.d, 1)} нм), без полосы, точный угол ${fmt(S.cfg.phi, 2)}°. Параметры эффектов заполнены из панели «Симулятор измерения», их можно менять здесь; единица — σ(λ) текущего измерения. Чтобы увидеть, как эффект превращается в ложный дефект, увеличьте его: ошибка угла 0.1° даёт сдвиг Ψ в HW-якорях порядка 10 σ, полоса 3 нм — затухание полос на синем краю.`);
+    $('dmInstrInfo').innerHTML = T(`Идеальный спектр: однородная плёнка (${DM.base.label}, d = ${fmt(DM.base.d, 1)} нм), без полосы, точный угол ${fmt(DM.cfg.phi, 2)}°. Параметры эффектов заполнены из панели «Симулятор измерения», их можно менять здесь; единица — σ(λ) текущего измерения. Чтобы увидеть, как эффект превращается в ложный дефект, увеличьте его: ошибка угла 0.1° даёт сдвиг Ψ в HW-якорях порядка 10 σ, полоса 3 нм — затухание полос на синем краю.`);
   }
 
   $('dmInstrRun').addEventListener('click', () => {
     if (!DM.base || DM.building) return; DM.building = true; DM.res.instr = null;
     const tasks = INSTR.map(e => ({ label: `Прибор: ${e.name}`, run: () => dmInstrOne(DM.base, e) })); tasks.push({ label: 'Прибор: графики', run: renderInstr });
-    runQueue(tasks, (err) => { DM.building = false; $('dmNavStatus').textContent = ''; $('dmStatus').textContent = err ? `Ошибка: ${err.message}` : 'Эффекты прибора пересчитаны.'; });
+    runQueue(tasks, (err) => { DM.building = false; $('dmNavStatus').textContent = ''; $('dmStatus').textContent = (err ? `Ошибка: ${err.message}` : 'Эффекты прибора пересчитаны.') + (DM.staleAgain ? ` Пока шёл пересчёт, условия изменились: ${DM.staleAgain}` : ''); if (DM.staleAgain) DM.stale = true; DM.staleAgain = null; });
   });
 
   // ---------------------------------------------------------------- построение всех иллюстраций (очередь, чтобы интерфейс не замирал)
@@ -1684,6 +1693,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     if (DM.building) return;
     DM.building = true; $('dmBuild').disabled = true; DM.res = {}; DM.ref = null;
     try { DM.base = dmBase(); } catch (e) { DM.building = false; $('dmBuild').disabled = false; $('dmStatus').textContent = 'Ошибка: ' + e.message; return; }
+    DM.staleAgain = null;                                                     // опорный фит внутри dmBase (шаг 1) сам помечает иллюстрации — это не «изменение во время построения»
     backFromAnalysis(); backSrcInfo(); instrFromSim();
     const base = DM.base, tasks = [];
     E.CLASSES.forEach((c, i) => tasks.push({ label: `Отпечатки: ${c.name}`, run: () => dmFingerOne(base, i) }));
@@ -1714,7 +1724,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   ['dmSource', 'dmDelta', 'dmRough', 'dmK', 'dmInstr'].forEach(id => $(id).addEventListener('change', () => { DM.stale = true; $('dmStatus').textContent = 'Условия иллюстраций изменились — нажмите «Построить все иллюстрации».'; }));
   // параметры прибора в симуляторе: незакреплённые поля раздела «Прибор» следуют за ними; отпечатки «с эффектами прибора» тоже от них зависят
   Object.values(INSTR_MAP).forEach(([sim]) => $(sim).addEventListener('input', () => { if (instrFromSim() || $('dmInstr').checked) markStale('Параметры прибора в симуляторе изменились — иллюстрации будут построены заново.'); }));
-  instrFromSim(); backSrcInfo();
+  instrFromSim(); backFromAnalysis(); backSrcInfo();
   pageHooks.demo.push(() => { if (DM.stale && !DM.building && S.data) dmBuildAll(); });
   // режим показа: флажок в боковой панели и кнопка в подменю (панель в этом режиме скрыта)
   function setPresent(on) { $('dmPresent').checked = on; document.body.classList.toggle('present', on); $('dmPresentBtn').classList.toggle('on', on); $('dmPresentBtn').setAttribute('aria-pressed', String(on)); fontScale = on ? 1.15 : 1; setTimeout(() => redrawCharts(), 50); }

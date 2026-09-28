@@ -9,6 +9,7 @@
     "examples:check": "node tools/gen_examples.js --check",
     "test": "node test/run_examples.js 600",
     "test:ui": "node test/ui_smoke.js",
+    "test:demo": "node test/demo_all.js",
     "verify:book": "node test/verify_book.js",
     "verify:backside": "node test/verify_backside.js"
   },

@@ -550,7 +550,7 @@ footer p { margin: 4px 0; }
     <p class="lead">Для плоскопараллельной прозрачной подложки пучки, отражённые её задней гранью, приходят в детектор некогерентно с передним: складываются не амплитуды, а матрицы Мюллера пучков. Ψ и Δ становятся «эффективными», образец частично деполяризует, а фит без учёта задней стороны приписывает разницу дефектам. Доля f — часть света задней стороны, собранная детектором.</p>
     <div class="fig-ctl">
       <label for="dmBackSub">подложка</label><select id="dmBackSub" style="width:auto"></select>
-      <label for="dmBackF">доля f</label><input type="range" id="dmBackF" min="0" max="1" step="0.05" value="1"><b id="dmBackFVal">1.00</b>
+      <label for="dmBackF">доля f</label><input type="range" id="dmBackF" min="0" max="1" step="0.01" value="1"><b id="dmBackFVal">1.00</b>
       <label for="dmBackDs">толщина, мм</label><input type="number" id="dmBackDs" step="0.1" min="0.01" value="1.0">
       <button type="button" class="small" id="dmBackRun">Пересчитать</button>
     </div>
@@ -1924,7 +1924,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
     return o;
   }
   const pts = (x, y) => Array.from(x, (v, i) => ({ x: v, y: y[i] }));
-  const fmtVal = (v) => { if (!isFinite(v)) return '—'; const a = Math.abs(v); return numStr(v, a >= 100 ? 1 : a >= 1 ? 3 : 5); };
+  const fmtVal = (v) => { if (v === null || v === undefined || !isFinite(v)) return '—'; const a = Math.abs(v); return numStr(v, a >= 100 ? 1 : a >= 1 ? 3 : 5); };
   /** Таблица значений графиков фигуры (двойник графика для чтения и копирования). Строки — по общей оси x (числовой, отсортированной, или
    *  по подписям категорий); у точек отпечатков с полем lam (плоскость Ψ-остаток, Δ-остаток) строки — по длине волны, на ряд два столбца Ψ и Δ. */
   function figTableHtml(fig) {
@@ -2410,7 +2410,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
   window.addEventListener('resize', () => { for (const c of Object.values(S.charts)) c.resize(); });
 
   // ================================================================ страница «Иллюстрации»
-  const DM = { res: {}, base: null, building: false, stale: true, view: 'plane', scale: 'common', anchUnits: 'deg', anchZoom: 0.25, backUnits: 'deg' };
+  const DM = { res: {}, base: null, ref: null, building: false, stale: true, staleAgain: null, view: 'plane', scale: 'common', anchUnits: 'deg', anchZoom: 0.25, backUnits: 'deg' };
   /** Варианты дефектов для иллюстраций: фиксированный порядок и фиксированные цвета (цвет следует за сущностью). */
   const DEFS = [
     { key: 'hom', name: 'однородная плёнка', short: 'однородная плёнка', g: 0, r: 0, a: 0, color: '--muted', cls: 0 },
@@ -2470,15 +2470,23 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
   const legendLabel = (dv, sz) => dv.short + (sizeLabel(dv, sz) ? ` (${sizeLabel(dv, sz)})` : '');
   const tipLam = { callbacks: { title: (items) => (items.length && items[0].raw && items[0].raw.lam !== undefined) ? `λ = ${fmtVal(items[0].raw.lam)} нм` : '', label: (it) => `${it.dataset.label}: Ψ ${fmtVal(it.raw.x)} σ, Δ ${fmtVal(it.raw.y)} σ` } };
 
-  /** Опорный фит для иллюстраций: выполняется сам, если его нет или «Априорные условия» менялись после него (S.cfgDirty). */
-  function ensureRef() { if ((!S.ref || S.cfgDirty) && S.data) step1(); return S.ref; }
+  /** Опорный фит для иллюстраций: фит страницы «Анализ», если он есть и «Априорные условия» после него не менялись; если его нет —
+   *  выполняется шаг 1 (панели «Анализа» пусты, терять нечего); если условия менялись (S.cfgDirty) — свой фит для текущих условий,
+   *  не трогая результаты шагов 1–4 на «Анализе». Возвращает {P, resid, feat, own}. */
+  function ensureRef() {
+    if (!S.ref && S.data) step1();
+    if (S.ref && !S.cfgDirty) return { P: S.ref.P, resid: S.ref.resid, feat: S.refFeat, own: false };
+    const ref = E.referenceFit(S.data, cfgRef(), S.prior);
+    return { P: ref.P, resid: ref.resid, feat: E.featureVector(S.data, S.cfg, ref.resid), own: true };
+  }
   /** Базовая плёнка иллюстраций: толщина и дисперсия без дефектов. */
   function dmBase() {
     readCfg();
     const src = $('dmSource').value; let d, mat, label;
     if (src === 'truth' && S.example && S.example.truth) { const Tt = S.example.truth; d = Tt.d; mat = Object.assign({}, Tt.mat, { Ak: 0 }); label = 'истина образца'; }
     else if (src === 'hand' || (src === 'truth')) { d = +$('dNom').value; mat = Object.assign({}, S.cfg.mat, { Ak: 0 }); label = src === 'truth' ? 'справочник (истина неизвестна)' : 'справочник и номинальная толщина'; }
-    else { const ref = ensureRef(); d = ref.P.d; mat = matOf(ref.P); label = 'опорный фит текущего спектра'; }
+    else { DM.ref = ensureRef(); d = DM.ref.P.d; mat = matOf(DM.ref.P); label = DM.ref.own ? 'опорный фит текущего спектра (пересчитан для текущих условий)' : 'опорный фит текущего спектра'; }
+    if (!DM.ref && S.data && S.ref) DM.ref = ensureRef();                      // отпечаток измеренного спектра и раздел «Дисперсия» — по тому же опорному фиту
     const lam = S.data.lam;
     return { d, mat, label, cfg: S.cfg, lam, sig: { psi: S.data.sigPsi, del: S.data.sigDel }, lamF: linspace(lam[0], lam[lam.length - 1], 401) };
   }
@@ -2511,7 +2519,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
   function fingerRange() {
     const R = DM.res.finger || []; let mp = 0, md = 0; const n = S.data.lam.length;
     R.forEach(r => { if (!r) return; mp = Math.max(mp, maxAbs(r.resid.slice(0, n))); md = Math.max(md, maxAbs(r.resid.slice(n))); });
-    if (S.ref) { mp = Math.max(mp, maxAbs(S.ref.resid.slice(0, n))); md = Math.max(md, maxAbs(S.ref.resid.slice(n))); }
+    if (DM.ref) { mp = Math.max(mp, maxAbs(DM.ref.resid.slice(0, n))); md = Math.max(md, maxAbs(DM.ref.resid.slice(n))); }
     return { psi: niceMax(mp * 1.05), del: niceMax(md * 1.05) };
   }
   function renderFinger() {
@@ -2526,7 +2534,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
       o.plugins.guides = { xLines: [{ x: 0, color: css('--line') }], yLines: [{ y: 0, color: css('--line') }] };
       o.scales.x.min = -rng.psi; o.scales.x.max = rng.psi; o.scales.y.min = -rng.del; o.scales.y.max = rng.del; o.scales.x.ticks.stepSize = rng.psi / 2; o.scales.y.ticks.stepSize = rng.del / 2;
       const ds = DEFS.map(dv => { const r = R[dv.cls]; if (!r) return null; const col = defColor(dv); return { label: legendLabel(dv, sz), data: tr(r.resid), borderColor: col, backgroundColor: col, borderWidth: 1.3, pointRadius: 2.2, pointHoverRadius: 5, showLine: true, tension: 0 }; }).filter(Boolean);
-      if (S.ref) ds.push({ label: 'измеренный спектр (опорный фит)', data: tr(S.ref.resid), borderColor: css('--text'), backgroundColor: css('--text'), borderWidth: 1, borderDash: [3, 3], pointRadius: 2.6, pointHoverRadius: 5, showLine: true, tension: 0 });
+      if (DM.ref) ds.push({ label: 'измеренный спектр (опорный фит)', data: tr(DM.ref.resid), borderColor: css('--text'), backgroundColor: css('--text'), borderWidth: 1, borderDash: [3, 3], pointRadius: 2.6, pointHoverRadius: 5, showLine: true, tension: 0 });
       return new Chart($('cFingerOverlay'), { type: 'scatter', data: { datasets: ds }, options: o });
     });
     // сетка из двенадцати классов
@@ -2548,7 +2556,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
     }));
     $('fingerRamp').style.display = DM.view === 'plane' ? '' : 'none';
     const R1 = R[1], Ra = R[6], Rr = R[3];
-    $('dmFingerInfo').innerHTML = T(`Плёнка: <b>${DM.base.label}</b>, d = ${fmt(DM.base.d, 2)} нм, ${S.cfg.mat.name}, подложка — ${subShort(S.cfg.subKey)}, угол ${fmt(S.cfg.phi, 2)}°${S.cfg.back ? `, задняя сторона (доля ${fmt(S.cfg.back.f, 2)})` : ''}. Шум — σ(λ) текущего измерения. Каналы якорей однородного фита: у градиента +${fmt(100 * sz.delta, 1)} % — Ψ в HW-якорях ${fmt(R1.ch.psiHW, 1)} σ; у шероховатости ${fmt(sz.rough, 1)} нм — |Δ| в HW ${fmt(Rr.ch.delHW, 1)} σ; у поглощения k₄₀₀ = ${fmtK(sz.k400, 1)} — перепад Ψ синие − красные якоря ${fmt(Ra.ch.psiHWtrend, 1)} σ.${S.ref ? ` Измеренный спектр: RMS Ψ/Δ ${fmt(chan(S.refFeat, 'rmsPsi'), 1)}/${fmt(chan(S.refFeat, 'rmsDel'), 1)} σ, похож на: ${looksLike(chansOf(S.refFeat))}.` : ''}`);
+    $('dmFingerInfo').innerHTML = T(`Плёнка: <b>${DM.base.label}</b>, d = ${fmt(DM.base.d, 2)} нм, ${S.cfg.mat.name}, подложка — ${subShort(S.cfg.subKey)}, угол ${fmt(S.cfg.phi, 2)}°${S.cfg.back ? `, задняя сторона (доля ${fmt(S.cfg.back.f, 2)})` : ''}. Шум — σ(λ) текущего измерения. Каналы якорей однородного фита: у градиента +${fmt(100 * sz.delta, 1)} % — Ψ в HW-якорях ${fmt(R1.ch.psiHW, 1)} σ; у шероховатости ${fmt(sz.rough, 1)} нм — |Δ| в HW ${fmt(Rr.ch.delHW, 1)} σ; у поглощения k₄₀₀ = ${fmtK(sz.k400, 1)} — перепад Ψ синие − красные якоря ${fmt(Ra.ch.psiHWtrend, 1)} σ.${DM.ref ? ` Измеренный спектр: RMS Ψ/Δ ${fmt(chan(DM.ref.feat, 'rmsPsi'), 1)}/${fmt(chan(DM.ref.feat, 'rmsDel'), 1)} σ, похож на: ${looksLike(chansOf(DM.ref.feat))}.` : ''}`);
   }
   document.querySelectorAll('#fingerView button').forEach(b => b.addEventListener('click', () => { DM.view = b.dataset.v; document.querySelectorAll('#fingerView button').forEach(x => x.classList.toggle('on', x === b)); renderFinger(); }));
   document.querySelectorAll('#fingerScale button').forEach(b => b.addEventListener('click', () => { DM.scale = b.dataset.s; document.querySelectorAll('#fingerScale button').forEach(x => x.classList.toggle('on', x === b)); renderFinger(); }));
@@ -2564,9 +2572,9 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
     const grid = E.anchors(lamF, hom.del, sub.del);
     const phaseAt = (l, target) => { const N1 = E.substrateN(cfg.subKey, [l]); const s = E.modelPsiDelta([l], N1, cfg.phi, 0, base.mat, 0, 0, 1, cfg.back, null), h = E.modelPsiDelta([l], N1, cfg.phi, base.d, base.mat, 0, 0, 40, cfg.back, null); return E.wrap(h.del[0] - s.del[0] - target); };
     const refine = (l0, target) => {
-      let a = l0, fa = phaseAt(a, target), b = l0 + 0.05, fb = phaseAt(b, target);
-      for (let it = 0; it < 8 && Math.abs(fb) > 1e-7; it++) { const den = fb - fa; if (!den) break; const c = b - fb * (b - a) / den; if (!isFinite(c) || Math.abs(c - l0) > 2) break; a = b; fa = fb; b = c; fb = phaseAt(b, target); }
-      return Math.abs(fb) <= Math.abs(fa) ? b : a;
+      let a = l0, fa = phaseAt(a, target), b = l0 + 0.05, fb = phaseAt(b, target), best = l0, fBest = Math.abs(fa);
+      for (let it = 0; it < 8 && Math.abs(fb) > 1e-7; it++) { if (Math.abs(fb) < fBest) { best = b; fBest = Math.abs(fb); } const den = fb - fa; if (!den) break; const c = b - fb * (b - a) / den; if (!isFinite(c) || Math.abs(c - l0) > 2) break; a = b; fa = fb; b = c; fb = phaseAt(b, target); }
+      return Math.abs(fb) < fBest ? b : best;
     };
     const HW = grid.HW.map(l => refine(l, 0)), QW = grid.QW.map(l => refine(l, 180));
     const diffHom = lamF.map((l, i) => E.wrap(hom.del[i] - sub.del[i])); let phHom = unwrapDeg(diffHom); const sign = phHom[phHom.length - 1] < phHom[0] ? -1 : 1;
@@ -2655,8 +2663,8 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
     const lamF = base.lamF, mats = [];
     mats.push({ key: 'hand', label: 'справочник', m: Object.assign({}, S.cfg.mat, { Ak: 0 }), color: '--muted', dash: [6, 4], d: NaN });
     if (S.example && S.example.truth) mats.push({ key: 'truth', label: 'истина', m: S.example.truth.mat, color: '--text', dash: null, d: S.example.truth.d });
-    if (S.ref) mats.push({ key: 'ref', label: 'опорный фит', m: matOf(S.ref.P), color: '--c-ref', dash: null, d: S.ref.P.d });
-    if (S.fin) mats.push({ key: 'fin', label: 'окончательный фит', m: matOf(S.fin.P), color: '--c-fin', dash: null, d: S.fin.P.d });
+    if (DM.ref) mats.push({ key: 'ref', label: DM.ref.own ? 'опорный фит (текущие условия)' : 'опорный фит', m: matOf(DM.ref.P), color: '--c-ref', dash: null, d: DM.ref.P.d });
+    if (S.fin) mats.push({ key: 'fin', label: S.cfgDirty ? 'окончательный фит (прежние условия)' : 'окончательный фит', m: matOf(S.fin.P), color: '--c-fin', dash: null, d: S.fin.P.d });
     for (const c of mats) { const nk = E.filmNK(lamF, c.m); c.n = nk.n; c.k = nk.k; c.kTail = c.m.Ak > 0 ? E.filmNK(lamF, Object.assign({}, c.m, { Ak: 0 })).k.map((k0, i) => nk.k[i] - k0) : null; c.k400 = c.m.Ak > 0 ? E.tailK400(c.m, c.m.Ak) : 0; }
     const Eg = linspace(1.0, 6.5, 276), HC = E.HC;
     for (const c of mats) { c.e2 = Eg.map(e => { const v = E.tlEps(e, c.m.A, c.m.E0, c.m.C, c.m.Eg)[1]; return v > 1e-7 ? v : null; }); c.e2tail = c.m.Ak > 0 ? Eg.map(e => { const v = E.tlEps(e, c.m.Ak, c.m.E0, c.m.C, E.TAIL_ET)[1]; return v > 1e-7 ? v : null; }) : null; }
@@ -2728,13 +2736,13 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
     makeChart('cBackFit', () => { const o = baseOpts('Длина волны, нм', 'остаток, σ'); o.plugins.guides = { yLines: [{ y: 0, color: css('--line') }] }; const r = B.fitNo.resid;
       return new Chart($('cBackFit'), { type: 'line', data: { datasets: [{ label: 'Ψ-остаток', data: pts(lam, Array.from(r.slice(0, n))), borderColor: css('--psi'), borderWidth: 1.5, pointRadius: 0 }, { label: 'Δ-остаток', data: pts(lam, Array.from(r.slice(n))), borderColor: css('--del'), borderWidth: 1.5, pointRadius: 0 }] }, options: o }); });
     const mp = maxAbs(B.dPsi), md = maxAbs(B.dDel), mdp = Math.max(...B.depol), negligible = mp < 1e-3 && md < 1e-2;   // поглощающая подложка (c-Si) или f = 0: эффекта нет
-    const absorbing = E.SUBSTRATES[B.subKey].fn(550)[1] > 1e-3;
+    const absorbing = E.SUBSTRATES[B.subKey].fn(lam[n - 1])[1] > 1e-4;             // k подложки на красном краю диапазона (где она прозрачнее всего)
     $('backFitSub').textContent = `спектр с задней стороной (${fL}) фитируется моделью без неё`;
     $('backFitNote').innerHTML = T(negligible
       ? `Задняя сторона здесь ничего не меняет (${B.f > 0 ? (absorbing ? 'подложка поглощает: свет задней грани гасится в её толще' : 'вклад ниже 10⁻³°') : 'доля f = 0'}), поэтому однородный фит без неё воспроизводит базовую плёнку: d = ${fmt(B.fitNo.d, 2)} нм при ${fmt(DM.base.d, 2)} нм, χ²/ν = ${fmt(B.fitNo.chi2, 1)}, ложных дефектов не возникает. Чтобы увидеть эффект, выберите прозрачную подложку и долю f > 0 и нажмите «Пересчитать».`
       : `Однородный фит без задней стороны находит d = ${fmt(B.fitNo.d, 2)} нм при d базовой плёнки ${fmt(DM.base.d, 2)} нм (ошибка ${fmt(B.fitNo.d - DM.base.d, 2)} нм), χ²/ν = ${fmt(B.fitNo.chi2, 1)}; остаток похож на: ${looksLike(B.fitNo.ch)}. Так задняя сторона, не учтённая в модели, превращается в ложные дефекты — поэтому её доля задаётся из независимого измерения и входит в модель, обучение и симулятор.`);
-    const effect = negligible ? 'Задняя сторона спектр не меняет (изменения Ψ, Δ ниже 10⁻³°, деполяризации нет).' : `Задняя сторона меняет Ψ до ${fmt(mp, 2)}° и Δ до ${fmt(md, 1)}°; степень деполяризации до ${fmt(mdp, 1)} %.`;
-    $('dmBackInfo').innerHTML = T(`Подложка — <b>${subName}</b>${absorbing ? ' (поглощает: вклад задней стороны гасится в её толще)' : ''}, толщина ${fmt(B.ds / 1e6, 2)} мм, доля ${fmt(B.f, 2)}; плёнка — ${DM.base.label}, d = ${fmt(DM.base.d, 1)} нм, угол ${fmt(S.cfg.phi, 2)}°. ${effect}${S.cfg.back ? '' : ' На странице «Анализ» задняя сторона сейчас выключена — здесь она включена только для иллюстрации.'}`);
+    const effect = negligible ? 'Задняя сторона спектр не меняет (изменения Ψ ниже 10⁻³°, Δ — ниже 10⁻²°, деполяризации нет).' : `Задняя сторона меняет Ψ до ${fmt(mp, 2)}° и Δ до ${fmt(md, 1)}°; степень деполяризации до ${fmt(mdp, 1)} %.`;
+    $('dmBackInfo').innerHTML = T(`Подложка — <b>${subName}</b>${absorbing && negligible ? ' (поглощает: вклад задней стороны гасится в её толще)' : ''}, толщина ${fmt(B.ds / 1e6, 2)} мм, доля ${fmt(B.f, 2)}; плёнка — ${DM.base.label}, d = ${fmt(DM.base.d, 1)} нм, угол ${fmt(S.cfg.phi, 2)}°. ${effect}${S.cfg.back ? '' : ' На странице «Анализ» задняя сторона сейчас выключена — здесь она включена только для иллюстрации.'}`);
     backSrcInfo();
   }
   document.querySelectorAll('#backUnits button').forEach(b => b.addEventListener('click', () => { DM.backUnits = b.dataset.u; document.querySelectorAll('#backUnits button').forEach(x => x.classList.toggle('on', x === b)); renderBack(); }));
@@ -2743,16 +2751,16 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
   // Поля раздела заполняются со страницы «Анализ» (подложка спектра, заданная доля или 1, толщина подложки), пока их не изменить здесь;
   // изменённое поле закрепляется за разделом, строка под полями показывает источник, кнопка «Как на «Анализе»» снимает закрепление.
   const BACK_IDS = ['dmBackSub', 'dmBackF', 'dmBackDs'];
-  function backFromAnalysis() {
-    if (!S.cfg) return;
-    if ($('dmBackSub').dataset.user !== '1') $('dmBackSub').value = S.cfg.subKey;
-    if ($('dmBackF').dataset.user !== '1') $('dmBackF').value = S.cfg.back ? S.cfg.back.f : 1;
+  function backFromAnalysis() {                                               // по текущим полям страницы «Анализ» (не по S.cfg последнего фита)
+    const back = readBack();
+    if ($('dmBackSub').dataset.user !== '1') $('dmBackSub').value = subSel.value;
+    if ($('dmBackF').dataset.user !== '1') $('dmBackF').value = back ? back.f : 1;
     if ($('dmBackDs').dataset.user !== '1') $('dmBackDs').value = $('backDs').value;
     $('dmBackFVal').textContent = fmt(+$('dmBackF').value, 2);
   }
   function backSrcInfo() {
-    const own = BACK_IDS.filter(id => $(id).dataset.user === '1'), nm = { dmBackSub: 'подложка', dmBackF: 'доля', dmBackDs: 'толщина' };
-    $('dmBackSrc').textContent = own.length ? `заданы здесь: ${own.map(id => nm[id]).join(', ')}; на странице «Анализ»: ${S.cfg ? `${subShort(S.cfg.subKey)}, ${S.cfg.back ? `доля ${fmt(S.cfg.back.f, 2)}` : 'задняя сторона выключена'}, ${fmt(+$('backDs').value, 2)} мм` : '—'}` : 'подложка, доля и толщина — со страницы «Анализ»';
+    const own = BACK_IDS.filter(id => $(id).dataset.user === '1'), nm = { dmBackSub: 'подложка', dmBackF: 'доля', dmBackDs: 'толщина' }, back = readBack();
+    $('dmBackSrc').textContent = own.length ? `заданы здесь: ${own.map(id => nm[id]).join(', ')}; на странице «Анализ»: ${subShort(subSel.value)}, ${back ? `доля ${fmt(back.f, 2)}` : 'задняя сторона выключена'}, ${fmt(+$('backDs').value, 2)} мм` : 'подложка, доля и толщина — со страницы «Анализ»';
     $('dmBackReset').hidden = !own.length;
   }
   $('dmBackRun').addEventListener('click', () => { if (!DM.base || DM.building) return; $('dmStatus').textContent = 'Задняя сторона: пересчёт…'; setTimeout(() => { try { dmBack(DM.base); renderBack(); $('dmStatus').textContent = 'Задняя сторона пересчитана.'; } catch (e) { $('dmStatus').textContent = 'Ошибка: ' + e.message; } }, 20); });
@@ -2838,7 +2846,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
   function dmBuildAll() {
     if (!S.data) { $('dmStatus').textContent = 'Сначала выберите спектр на странице «Анализ».'; return; }
     if (DM.building) return;
-    DM.building = true; $('dmBuild').disabled = true; DM.res = {};
+    DM.building = true; $('dmBuild').disabled = true; DM.res = {}; DM.ref = null;
     try { DM.base = dmBase(); } catch (e) { DM.building = false; $('dmBuild').disabled = false; $('dmStatus').textContent = 'Ошибка: ' + e.message; return; }
     backFromAnalysis(); backSrcInfo(); instrFromSim(); sizesFromSim();
     const base = DM.base, tasks = [];
@@ -2850,8 +2858,9 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
     INSTR.forEach(e => tasks.push({ label: `Прибор: ${e.name}`, run: () => dmInstrOne(base, e) }));
     tasks.push({ label: 'Прибор: графики', run: renderInstr });
     runQueue(tasks, (err, sec) => {
-      DM.building = false; DM.stale = false; $('dmBuild').disabled = false; $('dmNavStatus').textContent = '';
-      $('dmStatus').textContent = err ? `Ошибка: ${err.message}` : `Готово: все иллюстрации построены за ${fmt(sec, 0)} с (плёнка — ${base.label}).`;
+      DM.building = false; DM.stale = !!DM.staleAgain || !!err; $('dmBuild').disabled = false; $('dmNavStatus').textContent = '';
+      $('dmStatus').textContent = err ? `Ошибка: ${err.message}` : `Готово: все иллюстрации построены за ${fmt(sec, 0)} с (плёнка — ${base.label}).` + (DM.staleAgain ? ` Пока шло построение, условия изменились: ${DM.staleAgain}` : '');
+      DM.staleAgain = null;
     });
   }
   $('dmBuild').addEventListener('click', dmBuildAll);
@@ -2860,11 +2869,12 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
   // страницы они строятся заново, а построенные — с подсказкой в строке состояния): новый спектр и модель измерения (resetSteps),
   // «Априорные условия» (материал, дисперсия, подложка, угол, номинал и разброс толщины, полоса, задняя сторона), поля симулятора
   // (размеры дефектов, эффекты прибора) и выполненные фиты (опорный — основа иллюстраций, окончательный — раздел «Дисперсия»).
-  const markStale = (msg) => { DM.stale = true; if (Object.keys(DM.res).length) $('dmStatus').textContent = msg; };
+  const markStale = (msg) => { DM.stale = true; if (DM.building) DM.staleAgain = msg; else if (Object.keys(DM.res).length) $('dmStatus').textContent = msg; };   // во время построения — запомнить: по его окончании иллюстрации снова устареют
   S.onDataChange = () => markStale('Спектр или условия изменились — иллюстрации будут построены заново.');
-  S.onCfgChange = () => { S.cfgDirty = true; markStale('«Априорные условия» на странице «Анализ» изменились — иллюстрации будут построены заново (опорный фит пересчитается).'); };
+  S.onCfgChange = () => { S.cfgDirty = true; markStale('«Априорные условия» на странице «Анализ» изменились — иллюстрации будут построены заново (опорный фит для них пересчитается, результаты «Анализа» не трогаются).'); };
   S.onFitChange = () => markStale('На странице «Анализ» выполнен фит — иллюстрации будут построены заново (раздел «Дисперсия» покажет найденную дисперсию).');
-  ['matSel', 'subSel', 'phi', 'dNom', 'dRange', 'bw', 'mA', 'mE0', 'mC', 'mEg', 'mAuv', 'mEuv', 'sigDef', 'backF', 'backDs'].forEach(id => $(id).addEventListener('change', () => S.onCfgChange()));
+  // поля, от которых зависит опорный фит и модель иллюстраций (полоса прибора bw и σ по умолчанию в них не входят; доля и толщина задней стороны сбрасывают шаги сами — resetSteps)
+  ['matSel', 'subSel', 'phi', 'dNom', 'dRange', 'mA', 'mE0', 'mC', 'mEg', 'mAuv', 'mEuv'].forEach(id => $(id).addEventListener('change', () => S.onCfgChange()));
   ['dmSource', 'dmDelta', 'dmRough', 'dmK', 'dmInstr'].forEach(id => $(id).addEventListener('change', () => { DM.stale = true; $('dmStatus').textContent = 'Условия иллюстраций изменились — нажмите «Построить все иллюстрации».'; }));
   // размер, изменённый здесь, закрепляется за страницей; смена размеров в симуляторе на «Анализе» переносится в незакреплённые поля и обесценивает отпечатки
   Object.keys(DM_SIZE).forEach(id => $(id).addEventListener('change', () => { $(id).dataset.user = '1'; dmSizesInfo(); }));
@@ -2873,7 +2883,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
   $('dmSizesReset').addEventListener('click', () => { Object.keys(DM_SIZE).forEach(id => { delete $(id).dataset.user; }); if (sizesFromSim()) sizesChanged(); });
   // параметры прибора в симуляторе: незакреплённые поля раздела «Прибор» следуют за ними; отпечатки «с эффектами прибора» тоже от них зависят
   Object.values(INSTR_MAP).forEach(([sim]) => $(sim).addEventListener('input', () => { if (instrFromSim() || $('dmInstr').checked) markStale('Параметры прибора в симуляторе изменились — иллюстрации будут построены заново.'); }));
-  sizesFromSim(); instrSrcInfo(); backSrcInfo();
+  sizesFromSim(); instrFromSim(); backSrcInfo();
   pageHooks.demo.push(() => { if (DM.stale && !DM.building && S.data) dmBuildAll(); });
   // режим показа: флажок в боковой панели и кнопка в подменю (панель в этом режиме скрыта)
   function setPresent(on) { $('dmPresent').checked = on; document.body.classList.toggle('present', on); $('dmPresentBtn').classList.toggle('on', on); $('dmPresentBtn').setAttribute('aria-pressed', String(on)); fontScale = on ? 1.15 : 1; setTimeout(() => redrawCharts(), 50); }

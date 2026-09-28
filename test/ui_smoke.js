@@ -1,5 +1,5 @@
 /* Дымовой тест интерфейса в jsdom: встроенный образец, симуляция с большим градиентом, симуляция с поглощением,
-   образец с задней стороной подложки, очистка панелей, страница «Иллюстрации» (размеры дефектов, задняя сторона и прибор — со страницы «Анализ», закрепление и возврат; таблицы фигур; устаревание). Запуск: npm install && node test/ui_smoke.js   (≈25–30 мин на одном ядре: полоса в модели и задняя сторона удорожают фиты; jsdom втрое медленнее браузера) */
+   образец с задней стороной подложки, очистка панелей, страница «Иллюстрации» (размеры дефектов, задняя сторона и прибор — со страницы «Анализ», закрепление и возврат; таблицы фигур; устаревание). Запуск: npm install && node test/ui_smoke.js   (≈25–60 мин на одном ядре: полоса в модели и задняя сторона удорожают фиты; jsdom в 3–8 раз медленнее браузера) */
 const { JSDOM } = require("jsdom"); const fs = require("fs"), path = require("path");
 let html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
 html = html.replace(/<script src="https:\/\/cdnjs[^"]*chart[^"]*"><\/script>/, '<script>window.Chart = class { constructor(el, cfg){ this.data = cfg && cfg.data || { datasets: [] }; this.options = cfg && cfg.options || {}; } destroy(){} resize(){} update(){} };</script>')
@@ -13,8 +13,9 @@ w.addEventListener("error", (e) => { console.log("window error:", e.message); fa
 async function runAll(nTrain) {
   $("nTrain").value = String(nTrain); $("nTrain").dispatchEvent(new w.Event("input"));
   const t = Date.now(); $("btnAll").click();
-  while ($("globalStatus").textContent !== "Готово." && Date.now() - t < 600000) await new Promise(r => setTimeout(r, 200));
-  const t2 = Date.now(); while (/Анализ причин отклонения…/.test($("causeOut").textContent) && Date.now() - t2 < 300000) await new Promise(r => setTimeout(r, 200));
+  // предел ожидания — 30 мин на прогон: обучение с задней стороной подложки в jsdom идёт до 3 с на пример (в 8 раз медленнее Node)
+  while ($("globalStatus").textContent !== "Готово." && Date.now() - t < 1800000) await new Promise(r => setTimeout(r, 200));
+  const t2 = Date.now(); while (/Анализ причин отклонения…/.test($("causeOut").textContent) && Date.now() - t2 < 600000) await new Promise(r => setTimeout(r, 200));
   return (Date.now() - t) / 1000;
 }
 const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("tr")].slice(1).map(r => [...r.children].map(c => c.textContent.trim())).map(r => [r[0], r]));

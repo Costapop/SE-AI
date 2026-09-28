@@ -125,7 +125,7 @@ function checkChart(id, c, exp) {
     check(/Априорные условия.*изменились/.test($("dmStatus").textContent), "смена материала на «Анализе» помечает иллюстрации устаревшими: " + $("dmStatus").textContent);
     w.location.hash = "#analysis"; await sleep(30); w.location.hash = "#demo"; await sleep(50); await waitDemo();
     const matName = w.eval("EllipCore.MATERIALS")[$("matSel").value].name;
-    check(/^Готово/.test($("dmStatus").textContent) && txt($("dmFingerInfo")).includes(matName) && txt($("refOut")) !== dBefore && /χ²\/ν/.test(txt($("refOut"))), `при возврате на страницу иллюстрации перестроены для «${matName}», опорный фит пересчитан: ${txt($("refOut")).slice(0, 60)}`);
+    check(/^Готово/.test($("dmStatus").textContent) && /пересчитан для текущих условий/.test($("dmStatus").textContent) && txt($("dmFingerInfo")).includes(matName) && txt($("refOut")) === dBefore && /опорный фит \(текущие условия\)/.test(txt($("dmDispTable"))), `при возврате на страницу иллюстрации перестроены для «${matName}» на своём опорном фите, панели «Анализа» не тронуты: ${$("dmStatus").textContent.slice(0, 90)}`);
     $("matSel").value = matBefore; $("matSel").dispatchEvent(new w.Event("change"));
     // поля задней стороны и прибора: закрепление и возврат
     $("dmBackSub").value = "bk7"; $("dmBackSub").dispatchEvent(new w.Event("change"));

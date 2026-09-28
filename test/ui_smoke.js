@@ -1,5 +1,6 @@
 /* Дымовой тест интерфейса в jsdom: встроенный образец, симуляция с большим градиентом, симуляция с поглощением,
-   образец с задней стороной подложки, очистка панелей, страница «Иллюстрации». Запуск: npm install && node test/ui_smoke.js   (≈25–30 мин на одном ядре: полоса в модели и задняя сторона удорожают фиты; jsdom втрое медленнее браузера) */
+   образец с задней стороной подложки, очистка панелей, страница «Иллюстрации» (задняя сторона и прибор — со страницы «Анализ», закрепление и возврат; таблицы фигур; устаревание).
+   Запуск: npm install && node test/ui_smoke.js   (≈25–60 мин на одном ядре: полоса в модели и задняя сторона удорожают фиты; jsdom в 3–8 раз медленнее браузера) */
 const { JSDOM } = require("jsdom"); const fs = require("fs"), path = require("path");
 let html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
 html = html.replace(/<script src="https:\/\/cdnjs[^"]*chart[^"]*"><\/script>/, '<script>window.Chart = class { constructor(el, cfg){ this.data = cfg && cfg.data || { datasets: [] }; this.options = cfg && cfg.options || {}; } destroy(){} resize(){} update(){} };</script>')
@@ -13,8 +14,9 @@ w.addEventListener("error", (e) => { console.log("window error:", e.message); fa
 async function runAll(nTrain) {
   $("nTrain").value = String(nTrain); $("nTrain").dispatchEvent(new w.Event("input"));
   const t = Date.now(); $("btnAll").click();
-  while ($("globalStatus").textContent !== "Готово." && Date.now() - t < 600000) await new Promise(r => setTimeout(r, 200));
-  const t2 = Date.now(); while (/Анализ причин отклонения…/.test($("causeOut").textContent) && Date.now() - t2 < 300000) await new Promise(r => setTimeout(r, 200));
+  // предел ожидания — 30 мин на прогон: обучение с задней стороной подложки в jsdom идёт до 3 с на пример (в 8 раз медленнее Node)
+  while ($("globalStatus").textContent !== "Готово." && Date.now() - t < 1800000) await new Promise(r => setTimeout(r, 200));
+  const t2 = Date.now(); while (/Анализ причин отклонения…/.test($("causeOut").textContent) && Date.now() - t2 < 600000) await new Promise(r => setTimeout(r, 200));
   return (Date.now() - t) / 1000;
 }
 const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("tr")].slice(1).map(r => [...r.children].map(c => c.textContent.trim())).map(r => [r[0], r]));
@@ -62,7 +64,7 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   $("btn1").click(); await new Promise(r => setTimeout(r, 100));
   check(/Сначала опорный фит/.test(txt($("trainOut"))) && /Сначала обучение/.test(txt($("diagOut"))) && /Сначала диагноз/.test(txt($("finOut"))) && $("causeOut").innerHTML === "" && $("btn3").disabled && $("btn4").disabled, "панели очищены, кнопки 3–4 отключены");
   console.log("7. Страница «Иллюстрации»: построение для образца 09 (задняя сторона), запуск по адресу #demo");
-  check(/v1\.\d+\.\d+/.test($("appVer").textContent) && $("page-demo").hidden && !$("page-analysis").hidden, "версия в шапке, страница «Анализ» показана, «Иллюстрации» скрыта: " + $("appVer").textContent);
+  check(/v\d+\.\d+\.\d+/.test($("appVer").textContent) && $("page-demo").hidden && !$("page-analysis").hidden, "версия в шапке, страница «Анализ» показана, «Иллюстрации» скрыта: " + $("appVer").textContent);
   w.location.hash = "#demo"; await new Promise(r => setTimeout(r, 100));
   check(!$("page-demo").hidden && $("page-analysis").hidden, "переход по #demo показывает страницу «Иллюстрации»");
   { const t0 = Date.now(); while (!/^Готово|^Ошибка/.test($("dmStatus").textContent) && Date.now() - t0 < 600000) await new Promise(r => setTimeout(r, 200)); }
@@ -70,11 +72,20 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   check($("fingerGrid").querySelectorAll(".mini").length === 12, "сетка отпечатков: 12 классов");
   check($("dmAnchorTable").querySelectorAll("tbody tr").length === 5 && /HW-якорей \d+/.test(txt($("dmAnchorTable"))), "сводка по якорям: 5 вариантов плёнки");
   check(/истина/.test(txt($("dmDispTable"))) && /опорный фит/.test(txt($("dmDispTable"))) && $("dmFormula").querySelectorAll(".f-plain").length === 4, "таблица дисперсии со столбцами истины и опорного фита, формулы (текстовый вариант без KaTeX)");
-  check(/Найдено d = /.test(txt($("backFitNote"))) && $("dmBackSub").value === "silica" && $("dmBackF").value === "0.95", "задняя сторона: подложка и доля взяты из условий (кварц, 0.95): " + txt($("backFitNote")).slice(0, 80));
+  check(/находит d = /.test(txt($("backFitNote"))) && $("dmBackSub").value === "silica" && $("dmBackF").value === "0.95" && $("dmBackReset").hidden && /со страницы «Анализ»/.test($("dmBackSrc").textContent), "задняя сторона: подложка и доля взяты из условий (кварц, 0.95): " + txt($("backFitNote")).slice(0, 80));
+  check($("dmInstrReset").hidden && /Симулятор измерения/.test($("dmInstrSrc").textContent) && $("dmIbw").value === $("simBw").value, "прибор: параметры взяты из симулятора: " + $("dmInstrSrc").textContent);
+  { const hom = [...$("dmAnchorTable").querySelectorAll("tbody tr")][0]; const cells = [...hom.children].map(c => c.textContent.trim()); check(/однородная/.test(cells[0]) && cells.slice(1).every(v => /^[−-]?0\.000$/.test(v)), "сводка по якорям: у однородной прозрачной плёнки все отклонения точно нули: " + cells.slice(1).join(" | ")); }
   check($("dmInstrTable").querySelectorAll("tbody tr").length === 6 && $("instrFitGrid").querySelectorAll(".mini").length === 6, "эффекты прибора: 6 вариантов");
-  { const fig = $("figFingerOverlay"), tb = fig.querySelector('[data-act="table"]'); tb.click(); check(fig.querySelector(".fig-table table") && fig.querySelector(".fig-table tbody tr"), "кнопка «Таблица» выводит значения графика"); tb.click(); check(fig.querySelector(".fig-table").classList.contains("hidden"), "повторное нажатие скрывает таблицу"); }
+  { const fig = $("figFingerOverlay"), tb = fig.querySelector('[data-act="table"]'); tb.click(); const t = fig.querySelector(".fig-table table"); const head = t ? [...t.querySelectorAll("thead th")].map(h => h.textContent) : []; check(t && head[0] === "λ, нм" && head.length === 13 && t.querySelectorAll("tbody tr").length === 201, `кнопка «Таблица» выводит значения отпечатков по длине волны (${head.length} столбцов, ${t ? t.querySelectorAll("tbody tr").length : 0} строк)`); tb.click(); check(fig.querySelector(".fig-table").classList.contains("hidden"), "повторное нажатие скрывает таблицу"); }
   $("dmDelta").value = "3"; $("dmDelta").dispatchEvent(new w.Event("change"));
   check(/изменились/.test($("dmStatus").textContent), "смена размера дефекта помечает иллюстрации устаревшими");
+  $("dmBackSub").value = "bk7"; $("dmBackSub").dispatchEvent(new w.Event("change"));
+  check(!$("dmBackReset").hidden && /заданы здесь: подложка/.test($("dmBackSrc").textContent), "подложка раздела «Задняя сторона» закреплена за страницей: " + $("dmBackSrc").textContent);
+  $("dmBackReset").click(); { const t0 = Date.now(); while (!/пересчитана|Ошибка/.test($("dmStatus").textContent) && Date.now() - t0 < 120000) await new Promise(r => setTimeout(r, 100)); }
+  check($("dmBackReset").hidden && $("dmBackSub").value === "silica" && /пересчитана/.test($("dmStatus").textContent), "кнопка «Как на «Анализе»» вернула подложку кварц и пересчитала раздел");
+  $("phi").value = "64.9"; $("phi").dispatchEvent(new w.Event("change"));
+  check(/Априорные условия.*изменились/.test($("dmStatus").textContent), "смена угла на «Анализе» помечает иллюстрации устаревшими: " + $("dmStatus").textContent);
+  $("phi").value = "65"; $("phi").dispatchEvent(new w.Event("change"));
   w.location.hash = "#analysis"; await new Promise(r => setTimeout(r, 100));
   check($("page-demo").hidden && !$("page-analysis").hidden, "возврат на страницу «Анализ»");
   console.log(failures ? `\nОШИБОК: ${failures}` : "\nВсе проверки пройдены");

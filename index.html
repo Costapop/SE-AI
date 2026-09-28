@@ -227,7 +227,7 @@ footer p { margin: 4px 0; }
 </head>
 <body>
 <header class="appbar">
-  <div class="brand"><h1><span>SE-AI</span><span class="b2"> · Дефекты плёнки по остатку эллипсометрического фита</span></h1><span class="ver" id="appVer">v1.3.6</span></div>
+  <div class="brand"><h1><span>SE-AI</span><span class="b2"> · Дефекты плёнки по остатку эллипсометрического фита</span></h1><span class="ver" id="appVer">v1.3.7</span></div>
   <nav aria-label="Страницы"><a href="#analysis" data-page="analysis" class="active">Анализ</a><a href="#demo" data-page="demo">Иллюстрации</a></nav>
   <div class="tools">
     <span class="seg" role="group" aria-label="Тема оформления"><button type="button" data-theme="auto" title="Как в системе">Авто</button><button type="button" data-theme="light" title="Светлая тема">Светлая</button><button type="button" data-theme="dark" title="Тёмная тема">Тёмная</button></span>
@@ -502,9 +502,10 @@ footer p { margin: 4px 0; }
     <div id="dmAnchorInfo" class="note"></div>
     <figure class="fig" data-fig="se-ai_anchors_psi_phase" id="figAnchSpec">
       <figcaption><span class="fig-title">Ψ(λ) и Δ(λ) плёнки против голой подложки: где стоят якоря</span><span class="fig-sub">вертикальные линии — HW (сплошные) и QW (пунктир) якоря однородной плёнки</span><span class="fig-tools"></span></figcaption>
+      <div class="fig-ctl"><span>правый график:</span><span class="seg" id="anchDelMode"><button type="button" data-m="cos" class="on">cos Δ</button><button type="button" data-m="sin">sin Δ</button><button type="button" data-m="unwrap">Δ развёрнутая</button></span></div>
       <div class="grid2"><div class="chart demo"><canvas id="cAnchPsi"></canvas></div><div class="chart demo"><canvas id="cAnchDel"></canvas></div></div>
       <div class="chart demo short"><canvas id="cAnchPhaseDev"></canvas></div>
-      <div class="fig-note">Слева — Ψ подложки (пунктир), однородной плёнки и плёнок с дефектами: в HW-якорях кривая однородной плёнки касается кривой подложки. Справа — то же для Δ, развёрнутой без скачков через 0/360°: Δ плёнки за диапазон делает несколько оборотов, поэтому Δ подложки показана семейством уровней Δ<sub>подл</sub> + k·360° (пунктир; их однородная плёнка касается в HW-якорях) и Δ<sub>подл</sub> + 180° + k·360° (точки; их она пересекает в QW-якорях). Внизу — отклонение фазы полос плёнок с дефектами от однородной плёнки: единицы градусов при размахе Δ в тысячи, поэтому положения якорей у всех вариантов практически совпадают.</div>
+      <div class="fig-note">Слева — Ψ подложки (пунктир), однородной плёнки и плёнок с дефектами: в HW-якорях кривая однородной плёнки касается кривой подложки. Справа — Δ в непрерывном виде: <b>cos Δ</b> ограничен и не имеет скачков, в HW-якорях (Δ = Δ<sub>подл</sub>) кривая однородной плёнки касается кривой подложки cos Δ<sub>подл</sub> (пунктир), в QW-якорях (Δ = Δ<sub>подл</sub> + 180°) — кривой −cos Δ<sub>подл</sub> (точки); для прозрачной подложки это уровни ±1, и касания видны как экстремумы. <b>sin Δ</b> в тех же точках пересекает уровни sin Δ<sub>подл</sub> и −sin Δ<sub>подл</sub> (для прозрачной подложки — нуль) с наибольшей крутизной, поэтому на нём лучше видно, как дефекты сдвигают Δ в якорях. <b>Δ развёрнутая</b> — без скачков через 0/360°, подложка — семейство уровней Δ<sub>подл</sub> + k·360° (HW) и + 180° (QW). Внизу — отклонение фазы полос плёнок с дефектами от однородной плёнки: единицы градусов при размахе Δ в тысячи, поэтому положения якорей у всех вариантов практически совпадают.</div>
       <div class="fig-table hidden"></div>
     </figure>
     <figure class="fig" data-fig="se-ai_anchors_patterns" id="figAnchPat">
@@ -1741,7 +1742,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
 (function () {
   'use strict';
   const E = window.EllipCore;
-  const APP_VERSION = '1.3.6';
+  const APP_VERSION = '1.3.7';
   const $ = (id) => document.getElementById(id);
   const S = { data: null, example: null, cfg: null, prior: null, ref: null, train: null, probs: null, choice: null, fin: null, charts: {}, redraw: {} };
   const MINUS = '−';
@@ -2394,7 +2395,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
   window.addEventListener('resize', () => { for (const c of Object.values(S.charts)) c.resize(); });
 
   // ================================================================ страница «Иллюстрации»
-  const DM = { res: {}, base: null, building: false, stale: true, view: 'plane', scale: 'common', anchUnits: 'deg', backUnits: 'deg' };
+  const DM = { res: {}, base: null, building: false, stale: true, view: 'plane', scale: 'common', anchUnits: 'deg', anchDelMode: 'cos', backUnits: 'deg' };
   /** Варианты дефектов для иллюстраций: фиксированный порядок и фиксированные цвета (цвет следует за сущностью). */
   const DEFS = [
     { key: 'hom', name: 'однородная плёнка', short: 'однородная плёнка', g: 0, r: 0, a: 0, color: '--muted', cls: 0 },
@@ -2552,6 +2553,16 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
       return new Chart($('cAnchPsi'), { type: 'line', data: { datasets: ds }, options: o });
     });
     makeChart('cAnchDel', () => {
+      if (DM.anchDelMode !== 'unwrap') {
+        // cos Δ / sin Δ: непрерывны и ограничены; подложка — f(Δ_подл) (уровень HW) и f(Δ_подл + 180°) = −f(Δ_подл) (уровень QW)
+        const isCos = DM.anchDelMode === 'cos', f = (d) => (isCos ? Math.cos : Math.sin)(d * Math.PI / 180), name = isCos ? 'cos Δ' : 'sin Δ';
+        const o = baseOpts('Длина волны, нм', name); o.plugins.guides = { xLines: anchorLines(), yLines: [{ y: 0, color: css('--line') }] };
+        o.scales.y.min = -1.05; o.scales.y.max = 1.05; o.scales.y.ticks.stepSize = 0.5; o.scales.y.ticks.includeBounds = false;
+        const ds = [{ label: `голая подложка: ${name} (уровень HW)`, data: pts(A.lamF, A.sub.del.map(f)), borderColor: css('--text'), borderWidth: 1.4, borderDash: [6, 4], pointRadius: 0 },
+          { label: `${name} подложки + 180° (уровень QW)`, data: pts(A.lamF, A.sub.del.map(d => f(d + 180))), borderColor: css('--muted'), borderWidth: 1.2, borderDash: [2, 4], pointRadius: 0 }]
+          .concat(A.variants.map(v => ({ label: legendLabel(v.def, sz), data: pts(A.lamF, v.del.map(f)), borderColor: defColor(v.def), backgroundColor: defColor(v.def), borderWidth: v.def.key === 'hom' ? 2.2 : 1.6, pointRadius: 0 })));
+        return new Chart($('cAnchDel'), { type: 'line', data: { datasets: ds }, options: o });
+      }
       // Δ развёрнута без скачков через 0/360°; подложка — семейство уровней Δ_подл + k·360° (HW) и Δ_подл + 180° + k·360° (QW)
       const o = baseOpts('Длина волны, нм', 'Δ (развёрнутая), град'); o.plugins.guides = { xLines: anchorLines() };
       o.plugins.legend.labels.filter = (item) => !/^_/.test(item.text);
@@ -2592,6 +2603,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
     $('dmAnchorInfo').innerHTML = T(`Плёнка: <b>${DM.base.label}</b>, d = ${fmt(DM.base.d, 2)} нм; подложка — ${subShort(S.cfg.subKey)}${S.cfg.back ? ' с задней стороной' : ''}. Найдено HW-якорей: ${A.HW.length} (${A.HW.map(x => fmt(x, 0)).join(', ')} нм), QW-якорей: ${A.QW.length}.`);
   }
   document.querySelectorAll('#anchUnits button').forEach(b => b.addEventListener('click', () => { DM.anchUnits = b.dataset.u; document.querySelectorAll('#anchUnits button').forEach(x => x.classList.toggle('on', x === b)); renderAnchors(); }));
+  document.querySelectorAll('#anchDelMode button').forEach(b => b.addEventListener('click', () => { DM.anchDelMode = b.dataset.m; document.querySelectorAll('#anchDelMode button').forEach(x => x.classList.toggle('on', x === b)); renderAnchors(); }));
 
   // ---------------------------------------------------------------- 3. дисперсия
   function dmDisp(base) {

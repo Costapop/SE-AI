@@ -50,10 +50,10 @@ function checkChart(id, c, exp) {
     $("exSel").value = String(i); $("exSel").dispatchEvent(new w.Event("change")); await sleep(50);
     w.location.hash = "#demo"; await sleep(50);
     const sec = await waitDemo(); const st = $("dmStatus").textContent;
-    check(/^Готово/.test(st), `построено за ${sec.toFixed(0)} с: ${st}`);
+    check(/^Готово/.test(st) && !/Пока шло построение/.test(st), `построено за ${sec.toFixed(0)} с: ${st}`);
     const R = { title: ex.title, sec, status: st, texts: {}, charts: {} };
     // --- тексты
-    for (const id of ["dmSizesInfo", "dmFingerInfo", "fingerOverlaySub", "fingerGridSub", "fingerGridNote", "dmAnchorInfo", "dmDispInfo", "dispSub", "dmBackInfo", "backFitSub", "backFitNote", "dmInstrInfo", "anchUnitsNote"]) R.texts[id] = txt($(id));
+    for (const id of ["dmBackSrc", "dmInstrSrc", "dmFingerInfo", "fingerOverlaySub", "fingerGridSub", "fingerGridNote", "dmAnchorInfo", "dmDispInfo", "dispSub", "dmBackInfo", "backFitSub", "backFitNote", "dmInstrInfo", "anchUnitsNote"]) R.texts[id] = txt($(id));
     R.texts.fingerMinis = [...$("fingerGrid").querySelectorAll(".mini")].map(m => txt(m.querySelector(".mini-title")) + " — " + txt(m.querySelector(".mini-sub")));
     R.texts.instrRawMinis = [...$("instrRawGrid").querySelectorAll(".mini")].map(m => txt(m.querySelector(".mini-title")) + " — " + txt(m.querySelector(".mini-sub")));
     R.texts.instrFitMinis = [...$("instrFitGrid").querySelectorAll(".mini")].map(m => txt(m.querySelector(".mini-title")) + " — " + txt(m.querySelector(".mini-sub")));
@@ -71,7 +71,7 @@ function checkChart(id, c, exp) {
     check(R.texts.instrTable.length === 7, "сводка по эффектам прибора: 6 строк");
     // --- графики
     const C = charts();
-    const ids = ["cFingerOverlay", "cAnchPsi", "cAnchDel", "cAnchPhaseDev", "cAnchPsiHW", "cAnchPsiQW", "cAnchDelHW", "cAnchDelQW", "cDispN", "cDispK", "cDispTail", "cDispEps", "cBackPsi", "cBackDel", "cBackDiff", "cBackDepol", "cBackFit", "cInstrSum"].concat([...Array(12).keys()].map(k => "cFg" + k)).concat([...Array(6).keys()].flatMap(k => ["cIr" + k, "cIf" + k]));
+    const ids = ["cFingerOverlay", "cAnchPsi", "cAnchPhase", "cAnchPsiHW", "cAnchPsiQW", "cAnchDelHW", "cAnchDelQW", "cDispN", "cDispK", "cDispTail", "cDispEps", "cBackPsi", "cBackDel", "cBackDiff", "cBackDepol", "cBackFit", "cInstrSum"].concat([...Array(12).keys()].map(k => "cFg" + k)).concat([...Array(6).keys()].flatMap(k => ["cIr" + k, "cIf" + k]));
     for (const id of ids) R.charts[id] = checkChart(id, C[id]);
     // --- согласованность с ядром
     const num = (s) => parseFloat(String(s).replace(/−/g, "-").replace(/·10⁻³/, "e-3").replace(/[^\d.eE+-]/g, ""));
@@ -92,24 +92,23 @@ function checkChart(id, c, exp) {
     { const fig = $("figFingerOverlay"), tb = fig.querySelector('[data-act="table"]'); tb.click(); const t = fig.querySelector(".fig-table table"); const head = [...t.querySelectorAll("thead th")].map(txt), rows = [...t.querySelectorAll("tbody tr")].map(r => [...r.children].map(txt));
       check(head[0] === "λ, нм" && head.length === 1 + 2 * 6 && rows.length === ex.lam.length && rows.every(r => r.every(v => v !== "" && !/-/.test(v))) && +rows[0][0] === ex.lam[0], `таблица отпечатков: ${rows.length} строк по λ, ${head.length} столбцов (${head.slice(0, 3).join(" | ")} …), без пустых ячеек`); tb.click(); }
     { const fig = $("figAnchSpec"), tb = fig.querySelector('[data-act="table"]'); tb.click(); const t = fig.querySelector(".fig-table table"); const head = [...t.querySelectorAll("thead th")].map(txt), rows = [...t.querySelectorAll("tbody tr")].map(r => [...r.children].map(txt));
-      check(head[0] === "Длина волны, нм" && !head.some(h => /^_/.test(h)) && rows.length === 401 && +rows[0][0] === ex.lam[0] && +rows[400][0] === ex.lam[ex.lam.length - 1], `таблица графика Ψ(λ): ${rows.length} строк, маркеры якорей скрыты, ${head.length} столбцов`); tb.click(); }
+      const t2 = fig.querySelectorAll(".fig-table table")[1], head2 = t2 ? [...t2.querySelectorAll("thead th")].map(txt) : [];
+    check(head[0] === "Длина волны, нм" && head.length === 7 && rows.length === 401 && +rows[0][0] === ex.lam[0] && +rows[400][0] === ex.lam[ex.lam.length - 1] && !rows.some(r => r.some(v => /^-/.test(v))) && head2.length === 6 && t2.querySelectorAll("tbody tr").length === 401, `таблицы фигуры Ψ(λ) и фазы: ${rows.length} строк по λ, ${head.length} и ${head2.length} столбцов, настоящий минус`); tb.click(); }
     // якоря страницы = якоря ядра для той же плёнки на мелкой сетке
     {
       const A = C.cAnchPsi; const subDs = A.data.datasets.find(d => d.label === "голая подложка"), homDs = A.data.datasets.find(d => /^однородная/.test(d.label));
       const lamF = subDs.data.map(p => p.x); const nHW = (R.texts.dmAnchorInfo.match(/HW-якорей: (\d+)/) || [])[1], nQW = (R.texts.dmAnchorInfo.match(/QW-якорей: (\d+)/) || [])[1];
       const xl = (A.options.plugins.guides || {}).xLines || []; check(xl.length === +nHW + +nQW, `линии якорей на графике Ψ: ${xl.length} = HW ${nHW} + QW ${nQW}`);
       check(lamF.length === 401 && Math.abs(lamF[0] - ex.lam[0]) < 1e-9 && Math.abs(lamF[400] - ex.lam[ex.lam.length - 1]) < 1e-9, `мелкая сетка якорей: ${lamF.length} точек, ${lamF[0]}–${lamF[400]} нм`);
-      const marks = A.data.datasets.filter(d => /^_/.test(d.label)); check(marks.length === 10 && marks.every(d => d.data.every(p => isFinite(p.y))), `маркеры якорей на графике Ψ: ${marks.length} рядов (скрыты в легенде)`);
     }
     // ε₂: подписи и линии E_t, E_g, E₀
     { const c = C.cDispEps; const xl = ((c.options.plugins.guides || {}).xLines || []).map(l => l.label); check(xl.length === 3 && /Et/.test(xl[0]) && /Eg/.test(xl[1]) && /E₀/.test(xl[2]), `ε₂: линии ${xl.join(" | ")}`); }
     // задняя сторона: подложка и доля из условий
     check($("dmBackSub").value === ex.sub && Math.abs(+$("dmBackF").value - (ex.back ? ex.back.f : 1)) < 1e-9, `задняя сторона: подложка ${$("dmBackSub").value}, доля ${$("dmBackF").value}` + (ex.back ? "" : " (на «Анализе» выключена)"));
     check((ex.back ? !/выключена/.test(R.texts.dmBackInfo) : /выключена/.test(R.texts.dmBackInfo)), "сведения о задней стороне согласованы с флажком «Анализа»");
-    // размеры дефектов = поля симулятора
-    const simD = Math.abs(+$("simDelta").value) || 1, simR = +$("simRough").value || 2, simK = +$("simK").value || 1;
-    check(+$("dmDelta").value === simD && +$("dmRough").value === simR && +$("dmK").value === simK, `размеры из симулятора: |δ| ${$("dmDelta").value}, слой ${$("dmRough").value}, k₄₀₀ ${$("dmK").value} — ${R.texts.dmSizesInfo}`);
-    check(new RegExp(`δ = ±${(+$("dmDelta").value).toFixed(1)} %, слой ${(+$("dmRough").value).toFixed(1)} нм`).test(R.texts.fingerGridSub), `подпись сетки: ${R.texts.fingerGridSub}`);
+    // размеры дефектов — поля страницы «Иллюстрации» (в v1.3.3 — свои умолчания 1.0 / 2.0 / 1.0)
+    check(new RegExp(`δ = ±${(+$("dmDelta").value).toFixed(1)} %, слой ${(+$("dmRough").value).toFixed(1)} нм, k₄₀₀ = ${(+$("dmK").value).toFixed(1)}·10⁻³`).test(R.texts.fingerGridSub), `подпись сетки отпечатков = поля размеров: ${R.texts.fingerGridSub}`);
+    check(/со страницы «Анализ»/.test(R.texts.dmBackSrc) && /Симулятор измерения/.test(R.texts.dmInstrSrc) && $("dmBackReset").hidden && $("dmInstrReset").hidden, `источники полей разделов 4–5: ${R.texts.dmBackSrc} | ${R.texts.dmInstrSrc}`);
     out["ex" + (i + 1)] = R;
     console.log("  тексты: " + ["dmFingerInfo", "dmAnchorInfo", "dmDispInfo", "dmBackInfo", "backFitNote", "dmInstrInfo"].map(id => `\n    [${id}] ${R.texts[id]}`).join(""));
     console.log("  якоря:\n    " + R.texts.anchorTable.map(r => r.join(" | ")).join("\n    "));

@@ -1,5 +1,6 @@
 /* Дымовой тест интерфейса в jsdom: встроенный образец, симуляция с большим градиентом, симуляция с поглощением,
-   образец с задней стороной подложки, очистка панелей, страница «Иллюстрации» (размеры дефектов, задняя сторона и прибор — со страницы «Анализ», закрепление и возврат; таблицы фигур; устаревание). Запуск: npm install && node test/ui_smoke.js   (≈25–60 мин на одном ядре: полоса в модели и задняя сторона удорожают фиты; jsdom в 3–8 раз медленнее браузера) */
+   образец с задней стороной подложки, очистка панелей, страница «Иллюстрации» (задняя сторона и прибор — со страницы «Анализ», закрепление и возврат; таблицы фигур; устаревание).
+   Запуск: npm install && node test/ui_smoke.js   (≈25–60 мин на одном ядре: полоса в модели и задняя сторона удорожают фиты; jsdom в 3–8 раз медленнее браузера) */
 const { JSDOM } = require("jsdom"); const fs = require("fs"), path = require("path");
 let html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
 html = html.replace(/<script src="https:\/\/cdnjs[^"]*chart[^"]*"><\/script>/, '<script>window.Chart = class { constructor(el, cfg){ this.data = cfg && cfg.data || { datasets: [] }; this.options = cfg && cfg.options || {}; } destroy(){} resize(){} update(){} };</script>')
@@ -75,16 +76,9 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   check($("dmInstrReset").hidden && /Симулятор измерения/.test($("dmInstrSrc").textContent) && $("dmIbw").value === $("simBw").value, "прибор: параметры взяты из симулятора: " + $("dmInstrSrc").textContent);
   { const hom = [...$("dmAnchorTable").querySelectorAll("tbody tr")][0]; const cells = [...hom.children].map(c => c.textContent.trim()); check(/однородная/.test(cells[0]) && cells.slice(1).every(v => /^[−-]?0\.000$/.test(v)), "сводка по якорям: у однородной прозрачной плёнки все отклонения точно нули: " + cells.slice(1).join(" | ")); }
   check($("dmInstrTable").querySelectorAll("tbody tr").length === 6 && $("instrFitGrid").querySelectorAll(".mini").length === 6, "эффекты прибора: 6 вариантов");
-  check($("dmDelta").value === "1" && $("dmRough").value === "1" && $("dmK").value === "1.5" && $("dmSizesReset").hidden && /Симулятор измерения/.test($("dmSizesInfo").textContent) && /\|δ\| → 1\.0/.test($("dmSizesInfo").textContent), `размеры дефектов взяты из симулятора (δ = 0 → 1 %, слой 1 нм, k₄₀₀ 1.5): ${$("dmDelta").value}; ${$("dmRough").value}; ${$("dmK").value} — ${$("dmSizesInfo").textContent}`);
-  check(/δ = ±1\.0 %, слой 1\.0 нм, k₄₀₀ = 1\.5·10⁻³/.test(txt($("fingerGridSub"))), "подпись сетки отпечатков с этими размерами: " + txt($("fingerGridSub")));
   { const fig = $("figFingerOverlay"), tb = fig.querySelector('[data-act="table"]'); tb.click(); const t = fig.querySelector(".fig-table table"); const head = t ? [...t.querySelectorAll("thead th")].map(h => h.textContent) : []; check(t && head[0] === "λ, нм" && head.length === 13 && t.querySelectorAll("tbody tr").length === 201, `кнопка «Таблица» выводит значения отпечатков по длине волны (${head.length} столбцов, ${t ? t.querySelectorAll("tbody tr").length : 0} строк)`); tb.click(); check(fig.querySelector(".fig-table").classList.contains("hidden"), "повторное нажатие скрывает таблицу"); }
   $("dmDelta").value = "3"; $("dmDelta").dispatchEvent(new w.Event("change"));
   check(/изменились/.test($("dmStatus").textContent), "смена размера дефекта помечает иллюстрации устаревшими");
-  check(!$("dmSizesReset").hidden && /заданы здесь: \|δ\|/.test($("dmSizesInfo").textContent) && /из симулятора: слой, k₄₀₀/.test($("dmSizesInfo").textContent), "изменённый размер закреплён за страницей, остальные — из симулятора: " + $("dmSizesInfo").textContent);
-  $("simDelta").value = "-2.5"; $("simDelta").dispatchEvent(new w.Event("input")); $("simRough").value = "0.7"; $("simRough").dispatchEvent(new w.Event("input"));
-  check($("dmDelta").value === "3" && $("dmRough").value === "0.7", `смена размеров в симуляторе: закреплённое |δ| осталось 3, слой обновился до 0.7 (${$("dmDelta").value}; ${$("dmRough").value})`);
-  $("dmSizesReset").click();
-  check($("dmDelta").value === "2.5" && $("dmSizesReset").hidden && /будут построены заново|изменились/.test($("dmStatus").textContent), `кнопка «Как на «Анализе»» вернула |δ| = 2.5 из симулятора (${$("dmDelta").value}): ${$("dmStatus").textContent}`);
   $("dmBackSub").value = "bk7"; $("dmBackSub").dispatchEvent(new w.Event("change"));
   check(!$("dmBackReset").hidden && /заданы здесь: подложка/.test($("dmBackSrc").textContent), "подложка раздела «Задняя сторона» закреплена за страницей: " + $("dmBackSrc").textContent);
   $("dmBackReset").click(); { const t0 = Date.now(); while (!/пересчитана|Ошибка/.test($("dmStatus").textContent) && Date.now() - t0 < 120000) await new Promise(r => setTimeout(r, 100)); }

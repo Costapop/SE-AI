@@ -116,7 +116,9 @@ p.note { margin: 6px 0; }
 
 /* ---------------------------------------------------------------- основная область: панель запуска и шаги */
 .steps { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-.toolbar { position: sticky; top: calc(var(--barh) + 12px); z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+.toolbar { position: sticky; top: calc(var(--barh) + 12px); z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+.toolbar .tb-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; }
+.toolbar .tb-progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 .toolbar .stepbtns { display: flex; flex-wrap: wrap; gap: 6px; }
 .toolbar .stepbtns button { padding: 6px 10px; font-size: 13.5px; }
 .toolbar .status { margin: 0 0 0 auto; text-align: right; }
@@ -225,7 +227,7 @@ footer p { margin: 4px 0; }
 </head>
 <body>
 <header class="appbar">
-  <div class="brand"><h1><span>SE-AI</span><span class="b2"> · Дефекты плёнки по остатку эллипсометрического фита</span></h1><span class="ver" id="appVer">v1.3.0</span></div>
+  <div class="brand"><h1><span>SE-AI</span><span class="b2"> · Дефекты плёнки по остатку эллипсометрического фита</span></h1><span class="ver" id="appVer">v1.3.1</span></div>
   <nav aria-label="Страницы"><a href="#analysis" data-page="analysis" class="active">Анализ</a><a href="#demo" data-page="demo">Иллюстрации</a></nav>
   <div class="tools">
     <span class="seg" role="group" aria-label="Тема оформления"><button type="button" data-theme="auto" title="Как в системе">Авто</button><button type="button" data-theme="light" title="Светлая тема">Светлая</button><button type="button" data-theme="dark" title="Тёмная тема">Тёмная</button></span>
@@ -375,6 +377,7 @@ footer p { margin: 4px 0; }
       <button id="btn4" disabled>4 · Окончательный фит</button>
     </div>
     <div id="globalStatus" class="status"></div>
+    <div class="tb-progress" aria-hidden="true"><div id="runProgress"></div></div>
   </div>
   <section class="step" id="s0">
     <h2><span class="num">0</span>Измеренный спектр</h2>
@@ -1737,7 +1740,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
 (function () {
   'use strict';
   const E = window.EllipCore;
-  const APP_VERSION = '1.3.0';
+  const APP_VERSION = '1.3.1';
   const $ = (id) => document.getElementById(id);
   const S = { data: null, example: null, cfg: null, prior: null, ref: null, train: null, probs: null, choice: null, fin: null, charts: {}, redraw: {} };
   const MINUS = '−';
@@ -2029,10 +2032,13 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
       const tick = () => {
         const tb = performance.now();
         while (i < N && performance.now() - tb < 120) { const s = E.trainingExample(S.data, cfgR, S.prior, S.nuis, rng, i % K); X.push(s.x); y.push(s.y); sz.push([s.delta, s.dRough, s.k400]); i++; }
-        $('trainBar').style.width = (100 * i / N).toFixed(0) + '%';
-        $('trainOut').textContent = `Смоделировано и профитировано ${i} из ${N} примеров (${((performance.now() - t0) / 1000).toFixed(0)} с)…`;
+        // ход обучения — и в панели шага 2, и в закреплённой панели запуска (шаг 2 часто ниже края экрана)
+        const pct = (100 * i / N).toFixed(0), sec = ((performance.now() - t0) / 1000).toFixed(0);
+        $('trainBar').style.width = pct + '%'; $('runProgress').style.width = pct + '%';
+        $('trainOut').textContent = `Смоделировано и профитировано ${i} из ${N} примеров (${sec} с)…`;
+        $('globalStatus').textContent = `Обучение ИИ: ${i} из ${N} примеров (${pct} %), ${sec} с…`;
         if (i < N) { setTimeout(tick, 0); return; }
-        $('trainOut').textContent = 'Обучение логистической регрессии…';
+        $('trainOut').textContent = 'Обучение логистической регрессии…'; $('globalStatus').textContent = 'Обучение логистической регрессии…';
         setTimeout(() => {
           const idx = X.map((_, k) => k); for (let k = idx.length - 1; k > 0; k--) { const j = rng.int(k + 1); [idx[k], idx[j]] = [idx[j], idx[k]]; }
           const nte = Math.max(30, Math.floor(N / 4)), te = idx.slice(0, nte), tr = idx.slice(nte);
@@ -2045,6 +2051,7 @@ const EXAMPLES = [{"id":"ex1","file":"01_TiO2_on_BK7_65deg.xlsx","title":"TiO₂
           S.train = { model, rd, rr, rk, N, acc: 100 * acc / nte, accBig: nBig ? 100 * accBig / nBig : NaN, rmseD: Math.sqrt(e1 / nte), rmseR: Math.sqrt(e2 / nte), rmseK: Math.sqrt(e3 / nte) / 1000, sec: (performance.now() - t0) / 1000 };
           $('trainOut').innerHTML = T(`<span class="tag">${N} примеров (${K} классов) за ${fmt(S.train.sec, 0)} с</span><span class="tag ${S.train.acc > 70 ? 'ok' : 'warn'}">точность на отложенных ${fmt(S.train.acc, 1)} %</span><span class="tag">выше порога (|δ| ≥ 0.4 %, слой ≥ 0.4 нм, k₄₀₀ ≥ 0.2·10⁻³): ${fmt(S.train.accBig, 1)} %</span><span class="tag">регрессия: δ ± ${fmt(S.train.rmseD, 2)} %, слой ± ${fmt(S.train.rmseR, 2)} нм, k₄₀₀ ± ${fmtK(S.train.rmseK)}</span>
             <p class="note">Половина обучающих градиентов лежит в тонкой шкале (до 2 %), половина — от 2 % до заданного максимума; так же и хвост поглощения: половина до k₄₀₀ = 10⁻³, половина — от 10⁻³ до заданного максимума. Точность «по всем размерам» занижена примерами с дефектами ниже порога обнаружения — их не видно ни одному методу; с двенадцатью классами на класс приходится N/12 примеров, и точность растёт с N заметно дольше, чем с шестью. Оценки регрессии в обучении внутри заданного разброса толщины и дисперсии ±5 %; при выходе за него нужно переобучение.</p>`);
+          $('runProgress').style.width = '0%'; $('globalStatus').textContent = `Обучение завершено за ${fmt(S.train.sec, 0)} с.`;
           $('btn3').disabled = false; $('btn2').disabled = false; resolve(true);
         }, 10);
       };

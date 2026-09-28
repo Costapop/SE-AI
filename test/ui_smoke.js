@@ -72,9 +72,16 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   check(/истина/.test(txt($("dmDispTable"))) && /опорный фит/.test(txt($("dmDispTable"))) && $("dmFormula").querySelectorAll(".f-plain").length === 4, "таблица дисперсии со столбцами истины и опорного фита, формулы (текстовый вариант без KaTeX)");
   check(/Найдено d = /.test(txt($("backFitNote"))) && $("dmBackSub").value === "silica" && $("dmBackF").value === "0.95", "задняя сторона: подложка и доля взяты из условий (кварц, 0.95): " + txt($("backFitNote")).slice(0, 80));
   check($("dmInstrTable").querySelectorAll("tbody tr").length === 6 && $("instrFitGrid").querySelectorAll(".mini").length === 6, "эффекты прибора: 6 вариантов");
+  check($("dmDelta").value === "1" && $("dmRough").value === "1" && $("dmK").value === "1.5" && $("dmSizesReset").hidden && /Симулятор измерения/.test($("dmSizesInfo").textContent) && /\|δ\| → 1\.0/.test($("dmSizesInfo").textContent), `размеры дефектов взяты из симулятора (δ = 0 → 1 %, слой 1 нм, k₄₀₀ 1.5): ${$("dmDelta").value}; ${$("dmRough").value}; ${$("dmK").value} — ${$("dmSizesInfo").textContent}`);
+  check(/δ = ±1\.0 %, слой 1\.0 нм, k₄₀₀ = 1\.5·10⁻³/.test(txt($("fingerGridSub"))), "подпись сетки отпечатков с этими размерами: " + txt($("fingerGridSub")));
   { const fig = $("figFingerOverlay"), tb = fig.querySelector('[data-act="table"]'); tb.click(); check(fig.querySelector(".fig-table table") && fig.querySelector(".fig-table tbody tr"), "кнопка «Таблица» выводит значения графика"); tb.click(); check(fig.querySelector(".fig-table").classList.contains("hidden"), "повторное нажатие скрывает таблицу"); }
   $("dmDelta").value = "3"; $("dmDelta").dispatchEvent(new w.Event("change"));
   check(/изменились/.test($("dmStatus").textContent), "смена размера дефекта помечает иллюстрации устаревшими");
+  check(!$("dmSizesReset").hidden && /заданы здесь: \|δ\|/.test($("dmSizesInfo").textContent) && /из симулятора: слой, k₄₀₀/.test($("dmSizesInfo").textContent), "изменённый размер закреплён за страницей, остальные — из симулятора: " + $("dmSizesInfo").textContent);
+  $("simDelta").value = "-2.5"; $("simDelta").dispatchEvent(new w.Event("input")); $("simRough").value = "0.7"; $("simRough").dispatchEvent(new w.Event("input"));
+  check($("dmDelta").value === "3" && $("dmRough").value === "0.7", `смена размеров в симуляторе: закреплённое |δ| осталось 3, слой обновился до 0.7 (${$("dmDelta").value}; ${$("dmRough").value})`);
+  $("dmSizesReset").click();
+  check($("dmDelta").value === "2.5" && $("dmSizesReset").hidden && /будут построены заново|изменились/.test($("dmStatus").textContent), `кнопка «Как на «Анализе»» вернула |δ| = 2.5 из симулятора (${$("dmDelta").value}): ${$("dmStatus").textContent}`);
   w.location.hash = "#analysis"; await new Promise(r => setTimeout(r, 100));
   check($("page-demo").hidden && !$("page-analysis").hidden, "возврат на страницу «Анализ»");
   console.log(failures ? `\nОШИБОК: ${failures}` : "\nВсе проверки пройдены");

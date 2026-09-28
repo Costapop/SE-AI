@@ -227,7 +227,7 @@ footer p { margin: 4px 0; }
 </head>
 <body>
 <header class="appbar">
-  <div class="brand"><h1><span>SE-AI</span><span class="b2"> · Дефекты плёнки по остатку эллипсометрического фита</span></h1><span class="ver" id="appVer">v1.3.2</span></div>
+  <div class="brand"><h1><span>SE-AI</span><span class="b2"> · Дефекты плёнки по остатку эллипсометрического фита</span></h1><span class="ver" id="appVer">v1.3.3</span></div>
   <nav aria-label="Страницы"><a href="#analysis" data-page="analysis" class="active">Анализ</a><a href="#demo" data-page="demo">Иллюстрации</a></nav>
   <div class="tools">
     <span class="seg" role="group" aria-label="Тема оформления"><button type="button" data-theme="auto" title="Как в системе">Авто</button><button type="button" data-theme="light" title="Светлая тема">Светлая</button><button type="button" data-theme="dark" title="Тёмная тема">Тёмная</button></span>
@@ -617,7 +617,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
 (function () {
   'use strict';
   const E = window.EllipCore;
-  const APP_VERSION = '1.3.2';
+  const APP_VERSION = '1.3.3';
   const $ = (id) => document.getElementById(id);
   const S = { data: null, example: null, cfg: null, prior: null, ref: null, train: null, probs: null, choice: null, fin: null, charts: {}, redraw: {} };
   const MINUS = '−';
@@ -1529,7 +1529,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
       return new Chart($('cBackFit'), { type: 'line', data: { datasets: [{ label: 'Ψ-остаток', data: pts(lam, Array.from(r.slice(0, n))), borderColor: css('--psi'), borderWidth: 1.5, pointRadius: 0 }, { label: 'Δ-остаток', data: pts(lam, Array.from(r.slice(n))), borderColor: css('--del'), borderWidth: 1.5, pointRadius: 0 }] }, options: o }); });
     const mp = maxAbs(B.dPsi), md = maxAbs(B.dDel), mdp = Math.max(...B.depol);
     $('backFitSub').textContent = `спектр с задней стороной (${fL}) фитируется моделью без неё`;
-    $('backFitNote').innerHTML = T(`Найдено d = ${fmt(B.fitNo.d, 2)} нм при истинных ${fmt(DM.base.d, 2)} нм (ошибка ${fmt(B.fitNo.d - DM.base.d, 2)} нм), χ²/ν = ${fmt(B.fitNo.chi2, 1)}; остаток похож на: ${looksLike(B.fitNo.ch)}. Так задняя сторона, не учтённая в модели, превращается в ложные дефекты — поэтому её доля задаётся из независимого измерения и входит в модель, обучение и симулятор.`);
+    $('backFitNote').innerHTML = T(`Однородный фит без задней стороны находит d = ${fmt(B.fitNo.d, 2)} нм при d базовой плёнки ${fmt(DM.base.d, 2)} нм (ошибка ${fmt(B.fitNo.d - DM.base.d, 2)} нм), χ²/ν = ${fmt(B.fitNo.chi2, 1)}; остаток похож на: ${looksLike(B.fitNo.ch)}. Так задняя сторона, не учтённая в модели, превращается в ложные дефекты — поэтому её доля задаётся из независимого измерения и входит в модель, обучение и симулятор.`);
     $('dmBackInfo').innerHTML = T(`Подложка — <b>${subName}</b>${E.SUBSTRATES[B.subKey].fn(550)[1] > 1e-3 ? ' (поглощает: вклад задней стороны гасится в её толще)' : ''}, толщина ${fmt(B.ds / 1e6, 2)} мм, доля ${fmt(B.f, 2)}; плёнка ${DM.base.label}, d = ${fmt(DM.base.d, 1)} нм, угол ${fmt(S.cfg.phi, 2)}°. Задняя сторона меняет Ψ до ${fmt(mp, 2)}° и Δ до ${fmt(md, 1)}°; степень деполяризации до ${fmt(mdp, 1)} %.${S.cfg.back ? '' : ' На странице «Анализ» задняя сторона сейчас выключена — здесь она включена только для иллюстрации.'}`);
   }
   document.querySelectorAll('#backUnits button').forEach(b => b.addEventListener('click', () => { DM.backUnits = b.dataset.u; document.querySelectorAll('#backUnits button').forEach(x => x.classList.toggle('on', x === b)); renderBack(); }));

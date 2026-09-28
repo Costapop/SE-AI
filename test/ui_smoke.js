@@ -1,9 +1,11 @@
 /* Дымовой тест интерфейса в jsdom: встроенный образец, симуляция с большим градиентом, симуляция с поглощением,
-   образец с задней стороной подложки, очистка панелей. Запуск: npm install && node test/ui_smoke.js   (≈25–30 мин на одном ядре: полоса в модели и задняя сторона удорожают фиты; jsdom втрое медленнее браузера) */
+   образец с задней стороной подложки, очистка панелей, страница «Иллюстрации». Запуск: npm install && node test/ui_smoke.js   (≈25–30 мин на одном ядре: полоса в модели и задняя сторона удорожают фиты; jsdom втрое медленнее браузера) */
 const { JSDOM } = require("jsdom"); const fs = require("fs"), path = require("path");
 let html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
-html = html.replace(/<script src="https:\/\/cdnjs[^"]*chart[^"]*"><\/script>/, '<script>window.Chart = class { constructor(){} destroy(){} resize(){} };</script>')
-           .replace(/<script src="https:\/\/cdnjs[^"]*xlsx[^"]*"><\/script>/, '<script>window.XLSX = {};</script>');
+html = html.replace(/<script src="https:\/\/cdnjs[^"]*chart[^"]*"><\/script>/, '<script>window.Chart = class { constructor(el, cfg){ this.data = cfg && cfg.data || { datasets: [] }; this.options = cfg && cfg.options || {}; } destroy(){} resize(){} update(){} };</script>')
+           .replace(/<script src="https:\/\/cdnjs[^"]*xlsx[^"]*"><\/script>/, '<script>window.XLSX = {};</script>')
+           .replace(/<script src="https:\/\/cdnjs[^"]*katex[^"]*"><\/script>/, '')
+           .replace(/<link rel="stylesheet" href="https:\/\/cdnjs[^"]*katex[^"]*">/, '');
 const dom = new JSDOM(html, { runScripts: "dangerously", pretendToBeVisual: true }); const w = dom.window; w.HTMLCanvasElement.prototype.getContext = () => ({});
 const $ = (id) => w.document.getElementById(id); const txt = (el) => el.textContent.replace(/\s+/g, " ").trim();
 let failures = 0; const check = (ok, msg) => { console.log((ok ? "  ok   " : "  FAIL ") + msg); if (!ok) failures++; };
@@ -29,12 +31,12 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   check(/Сначала диагноз/.test(txt($("finOut"))) && $("causeOut").innerHTML === "", "панели шагов 2–4 очищены после генерации");
   sec = await runAll(200); const tr2 = truthRows();
   check(!/не совпадает/.test(tr2["Набор дефектов"][2]), `набор дефектов совпал (${sec.toFixed(0)} с)`);
-  const dFound = parseFloat((tr2["δ, %"][2].match(/найдено (-?[\d.]+)/) || [])[1]);
+  const num = (t) => parseFloat(String(t).replace(/−/g, "-")); const dFound = num((tr2["δ, %"][2].match(/найдено ([-−]?[\d.]+)/) || [])[1]);
   check(Math.abs(dFound - 8) < 0.3, `градиент найден: ${dFound} % (истина 8 %)`);
   console.log("3. Симуляция: HfO2/Si 65°, поглощение k₄₀₀ = 1.5·10⁻³ + слой 1 нм, без градиента");
   $("matSel").value = "hfo2"; $("matSel").dispatchEvent(new w.Event("change")); $("subSel").value = "si"; $("phi").value = "65"; $("dNom").value = "950"; $("dNom").dispatchEvent(new w.Event("change"));
   $("simD").value = "933"; $("simDelta").value = "0"; $("simRough").value = "1.0"; $("simK").value = "1.5"; $("simK").dispatchEvent(new w.Event("input")); $("simSeed").value = "11";
-  check(/A_k/.test($("simKInfo").textContent), "подсказка к полю поглощения показывает k хвоста и A_k: " + $("simKInfo").textContent);
+  check(/A_?k = /.test($("simKInfo").textContent), "подсказка к полю поглощения показывает k хвоста и A_k: " + $("simKInfo").textContent);
   $("btnSim").click(); { const t0 = Date.now(); while (!/Сгенерировано|неверно|Нужно|ограничен/.test($("simStatus").textContent) && Date.now() - t0 < 60000) await new Promise(r => setTimeout(r, 100)); }
   check(/Хвост поглощения/.test($("simStatus").textContent), "спектр с поглощением сгенерирован: " + $("simStatus").textContent.replace(/^.*Хвост/, "Хвост"));
   sec = await runAll(500); const tr3 = truthRows();   // с 12 классами при 300 примерах классификатор ещё добавляет ложный градиент
@@ -49,7 +51,7 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   check(!/не совпадает/.test(tr4["Набор дефектов"][2]), `набор дефектов совпал: «${tr4["Набор дефектов"][1]}» (${sec.toFixed(0)} с)`);
   check(/0\.960/.test(tr4["Задняя сторона подложки, доля"][1]) && /в модели 0\.950/.test(tr4["Задняя сторона подложки, доля"][2]), "таблица истины показывает истинную и заданную долю: " + tr4["Задняя сторона подложки, доля"].join(" | "));
   check(/доля задней стороны как у образца/.test(txt($("causeOut"))), "в бюджете отклонения есть строка про долю задней стороны");
-  const dErr = parseFloat((tr4["d, нм"][2].match(/ошибка (-?[\d.]+)/) || [])[1]);
+  const dErr = num((tr4["d, нм"][2].match(/ошибка ([-−]?[\d.]+)/) || [])[1]);
   check(Math.abs(dErr) < 1.5, `толщина найдена с ошибкой ${dErr} нм`);
   console.log("5. Снятие флажка задней стороны сбрасывает шаги, установка обратно — тоже");
   $("ckBack").click(); await new Promise(r => setTimeout(r, 50));
@@ -59,6 +61,22 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   console.log("6. Повторный шаг 1 очищает шаги 2–4");
   $("btn1").click(); await new Promise(r => setTimeout(r, 100));
   check(/Сначала опорный фит/.test(txt($("trainOut"))) && /Сначала обучение/.test(txt($("diagOut"))) && /Сначала диагноз/.test(txt($("finOut"))) && $("causeOut").innerHTML === "" && $("btn3").disabled && $("btn4").disabled, "панели очищены, кнопки 3–4 отключены");
+  console.log("7. Страница «Иллюстрации»: построение для образца 09 (задняя сторона), запуск по адресу #demo");
+  check(/v1\.\d+\.\d+/.test($("appVer").textContent) && $("page-demo").hidden && !$("page-analysis").hidden, "версия в шапке, страница «Анализ» показана, «Иллюстрации» скрыта: " + $("appVer").textContent);
+  w.location.hash = "#demo"; await new Promise(r => setTimeout(r, 100));
+  check(!$("page-demo").hidden && $("page-analysis").hidden, "переход по #demo показывает страницу «Иллюстрации»");
+  { const t0 = Date.now(); while (!/^Готово|^Ошибка/.test($("dmStatus").textContent) && Date.now() - t0 < 600000) await new Promise(r => setTimeout(r, 200)); }
+  check(/^Готово/.test($("dmStatus").textContent), "иллюстрации построены: " + $("dmStatus").textContent);
+  check($("fingerGrid").querySelectorAll(".mini").length === 12, "сетка отпечатков: 12 классов");
+  check($("dmAnchorTable").querySelectorAll("tbody tr").length === 5 && /HW-якорей \d+/.test(txt($("dmAnchorTable"))), "сводка по якорям: 5 вариантов плёнки");
+  check(/истина/.test(txt($("dmDispTable"))) && /опорный фит/.test(txt($("dmDispTable"))) && $("dmFormula").querySelectorAll(".f-plain").length === 4, "таблица дисперсии со столбцами истины и опорного фита, формулы (текстовый вариант без KaTeX)");
+  check(/Найдено d = /.test(txt($("backFitNote"))) && $("dmBackSub").value === "silica" && $("dmBackF").value === "0.95", "задняя сторона: подложка и доля взяты из условий (кварц, 0.95): " + txt($("backFitNote")).slice(0, 80));
+  check($("dmInstrTable").querySelectorAll("tbody tr").length === 6 && $("instrFitGrid").querySelectorAll(".mini").length === 6, "эффекты прибора: 6 вариантов");
+  { const fig = $("figFingerOverlay"), tb = fig.querySelector('[data-act="table"]'); tb.click(); check(fig.querySelector(".fig-table table") && fig.querySelector(".fig-table tbody tr"), "кнопка «Таблица» выводит значения графика"); tb.click(); check(fig.querySelector(".fig-table").classList.contains("hidden"), "повторное нажатие скрывает таблицу"); }
+  $("dmDelta").value = "3"; $("dmDelta").dispatchEvent(new w.Event("change"));
+  check(/изменились/.test($("dmStatus").textContent), "смена размера дефекта помечает иллюстрации устаревшими");
+  w.location.hash = "#analysis"; await new Promise(r => setTimeout(r, 100));
+  check($("page-demo").hidden && !$("page-analysis").hidden, "возврат на страницу «Анализ»");
   console.log(failures ? `\nОШИБОК: ${failures}` : "\nВсе проверки пройдены");
   process.exit(failures ? 1 : 0);
 })();

@@ -9,7 +9,7 @@ const args = process.argv.slice(2), jsonAt = args.indexOf("--json"), jsonFile = 
 const want = args.filter((a, i) => a !== "--json" && (jsonAt < 0 || i !== jsonAt + 1)).join(",").split(",").map(s => s.trim()).filter(Boolean);
 let html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
 // Chart.js — заглушка, запоминающая тип, ряды и настройки графика (в jsdom нет canvas); SheetJS не нужен; KaTeX — текстовый вариант формул
-html = html.replace(/<script src="https:\/\/cdnjs[^"]*chart[^"]*"><\/script>/, '<script>window.Chart = class { constructor(el, cfg){ this.canvas = el; this.type = cfg && cfg.type; this.data = cfg && cfg.data || { datasets: [] }; this.options = cfg && cfg.options || {}; } destroy(){} resize(){} update(){} }; window.Chart.defaults = { font: {} }; window.Chart.register = () => {}; window.Chart.Ticks = { formatters: { numeric: (v) => String(v) } };</script>')
+html = html.replace(/<script src="https:\/\/cdnjs[^"]*chart[^"]*"><\/script>/, '<script>window.Chart = class { constructor(el, cfg){ this.canvas = el; this.type = cfg && cfg.type; this.data = cfg && cfg.data || { datasets: [] }; this.options = cfg && cfg.options || {}; this.vis = {}; } destroy(){} resize(){} update(){ this.updated = true; } setDatasetVisibility(i, v){ this.vis[i] = v; } isDatasetVisible(i){ return this.vis[i] !== undefined ? this.vis[i] : !(this.data.datasets[i] && this.data.datasets[i].hidden); } }; window.Chart.defaults = { font: {} }; window.Chart.register = () => {}; window.Chart.Ticks = { formatters: { numeric: (v) => String(v) } };</script>')
   .replace(/<script src="https:\/\/cdnjs[^"]*xlsx[^"]*"><\/script>/, '<script>window.XLSX = {};</script>')
   .replace(/<script src="https:\/\/cdnjs[^"]*katex[^"]*"><\/script>/, '')
   .replace(/<link rel="stylesheet" href="https:\/\/cdnjs[^"]*katex[^"]*">/, '');
@@ -114,7 +114,7 @@ function checkChart(id, c, exp) {
     check((ex.back ? !/выключена/.test(R.texts.dmBackInfo) : /выключена/.test(R.texts.dmBackInfo)), "сведения о задней стороне согласованы с флажком «Анализа»");
     // размеры дефектов — незакреплённые поля следуют за страницей «Анализ»: окончательного фита здесь нет, поэтому берутся поля «Дефекты»
     // симулятора (градиент — по модулю, нуль → умолчание 1 / 2 / 1); подписи фигур — по тем же размерам (до двух знаков без лишнего нуля)
-    check($("dmDelta").value === expSize("dmDelta", "simDelta", 1) && $("dmRough").value === expSize("dmRough", "simRough", 2) && $("dmK").value === expSize("dmK", "simK", 1) && /симулятора/.test(R.texts.dmSizesSrc) && /окончательного фита нет/.test(R.texts.dmSizesSrc) && $("dmSizesReset").hidden, `размеры дефектов — из полей «Дефекты» симулятора (|δ| ${$("dmDelta").value}, слой ${$("dmRough").value}, k₄₀₀ ${$("dmK").value}): ${R.texts.dmSizesSrc}`);
+    check($("dmDelta").value === expSize("dmDelta", "simDelta", 1) && $("dmRough").value === expSize("dmRough", "simRough", 2) && $("dmK").value === expSize("dmK", "simK", 1) && /^окончательного фита нет; источники: \|δ\| — симулятор; EMA-слой — симулятор; k₄₀₀ — 1\.0 по умолчанию \(хвост поглощения в симуляторе 0\)$/.test(R.texts.dmSizesSrc) && $("dmSizesReset").hidden, `размеры дефектов — из полей «Дефекты» симулятора (|δ| ${$("dmDelta").value}, слой ${$("dmRough").value}, k₄₀₀ ${$("dmK").value}): ${R.texts.dmSizesSrc}`);
     check(new RegExp(`δ = ±${fmtS($("dmDelta").value)} %, слой ${fmtS($("dmRough").value)} нм, k₄₀₀ = ${fmtS($("dmK").value)}·10⁻³`).test(R.texts.fingerGridSub), `подпись сетки отпечатков = поля размеров: ${R.texts.fingerGridSub}`);
     { const leg = (C.cFingerOverlay.data.datasets || []).map(d => d.label); check(leg.some(l => l === `градиент n↑ (δ = +${fmtS($("dmDelta").value)} %)`) && leg.some(l => l === `шероховатость (слой ${fmtS($("dmRough").value)} нм)`) && leg.some(l => l === `поглощение (k₄₀₀ = ${fmtS($("dmK").value)}·10⁻³)`), `легенда одиночных дефектов с теми же размерами: ${leg.join(" | ")}`); }
     check(/со страницы «Анализ»/.test(R.texts.dmBackSrc) && /Симулятор измерения/.test(R.texts.dmInstrSrc) && $("dmBackReset").hidden && $("dmInstrReset").hidden, `источники полей разделов 4–5: ${R.texts.dmBackSrc} | ${R.texts.dmInstrSrc}`);
@@ -148,7 +148,7 @@ function checkChart(id, c, exp) {
     check($("dmInstrReset").hidden && $("dmIbw").value === "0.7" && /пересчитаны/.test($("dmStatus").textContent) && /FWHM 0\.7 нм/.test(txt($("dmInstrTable"))), `кнопка «Как на «Анализе»» вернула полосу ${$("dmIbw").value} из симулятора и пересчитала эффекты: ${$("dmStatus").textContent}`);
     // размеры дефектов: нуль на странице, закрепление, смена полей «Дефекты» симулятора, кнопка «Как на «Анализе»»
     $("dmK").value = "0"; $("dmK").dispatchEvent(new w.Event("change"));
-    check(/k₄₀₀ = 0 \(нулевой дефект отпечатка не даёт\) — допустимо 0\.05–50 ×10⁻³/.test($("dmStatus").textContent) && $("dmK").classList.contains("invalid") && /заданы здесь: k₄₀₀/.test(txt($("dmSizesSrc"))) && !$("dmSizesReset").hidden, "нуль k₄₀₀ на странице назван недопустимым, поле подсвечено и закреплено: " + $("dmStatus").textContent);
+    check(/k₄₀₀ = 0 \(нулевой дефект отпечатка не даёт\) — допустимо 0\.05–50 ×10⁻³/.test($("dmStatus").textContent) && $("dmK").classList.contains("invalid") && /k₄₀₀ — задано здесь/.test(txt($("dmSizesSrc"))) && !$("dmSizesReset").hidden, "нуль k₄₀₀ на странице назван недопустимым, поле подсвечено и закреплено: " + $("dmStatus").textContent);
     { const subBefore = txt($("fingerGridSub")); $("dmBuild").click(); await sleep(150);
       check(/^Размеры дефектов вне допустимого: k₄₀₀ = 0/.test($("dmStatus").textContent) && txt($("fingerGridSub")) === subBefore, "с нулём построение не начинается, прежние иллюстрации остаются: " + subBefore); }
     $("dmK").value = "0.5"; $("dmK").dispatchEvent(new w.Event("change"));
@@ -160,6 +160,21 @@ function checkChart(id, c, exp) {
     $("dmSizesReset").click(); await sleep(100); await waitDemo();
     check($("dmSizesReset").hidden && $("dmK").value === expSize("dmK", "simK", 1) && /^Готово/.test($("dmStatus").textContent) && new RegExp(`k₄₀₀ = ${fmtS($("dmK").value)}·10⁻³`).test(txt($("fingerGridSub"))), `кнопка «Как на «Анализе»» вернула k₄₀₀ = ${$("dmK").value} (симулятор: ${$("simK").value}) и перестроила иллюстрации: ${txt($("fingerGridSub"))}`);
     $("simDelta").value = "-0.8"; $("simDelta").dispatchEvent(new w.Event("input"));
+    // якорные паттерны: одна общая легенда над сеткой (легенды в панелях выключены, в PNG включаются), одинаковые оси λ у четырёх панелей;
+    // щелчок по варианту в общей легенде скрывает его на всех четырёх панелях, состояние переживает перерисовку (смена единиц)
+    {
+      const ids = ["cAnchPsiHW", "cAnchPsiQW", "cAnchDelHW", "cAnchDelQW"], C2 = charts(), lamF = EX[list[list.length - 1]].lam;
+      const btns = () => [...$("anchLegend").querySelectorAll("button.lg")];
+      check(btns().length === 5 && btns().every(b => !b.classList.contains("off")) && /однородная плёнка/.test(btns()[0].textContent) && /поглощение \(k₄₀₀ = /.test(btns()[4].textContent), `общая легенда: ${btns().map(b => b.textContent).join(" | ")}`);
+      check(ids.every(id => C2[id] && C2[id].options.plugins.legend.display === false && C2[id].$pngLegend === true && C2[id].data.datasets.length === 5 && C2[id].data.datasets.every(d => !d.hidden) && C2[id].options.scales.x.min === lamF[0] && C2[id].options.scales.x.max === lamF[lamF.length - 1]), "панели: легенда выключена (включается в PNG), пять рядов видимы, ось λ = диапазон измерения на всех четырёх");
+      btns()[0].click();   // «однородная плёнка»
+      check(ids.every(id => C2[id].isDatasetVisible && !C2[id].isDatasetVisible(0) && C2[id].isDatasetVisible(1) && C2[id].updated) && btns()[0].classList.contains("off") && !btns()[1].classList.contains("off"), "щелчок по легенде скрыл ряд сразу на всех четырёх панелях, пункт легенды перечёркнут");
+      $("anchUnits").querySelector('[data-u="sig"]').click(); const C3 = charts();
+      check(ids.every(id => C3[id] !== C2[id] && C3[id].data.datasets[0].hidden === true && !C3[id].data.datasets[1].hidden) && /отклонение, σ/.test(C3.cAnchPsiHW.options.scales.y.title.text) && btns()[0].classList.contains("off"), "после перерисовки (единицы σ) скрытый ряд остаётся скрытым на всех панелях и в легенде");
+      btns()[0].click();
+      check(ids.every(id => C3[id].isDatasetVisible(0)) && btns().every(b => !b.classList.contains("off")), "повторный щелчок возвращает ряд на всех панелях");
+      $("anchUnits").querySelector('[data-u="deg"]').click();
+    }
     $("btn1").click(); await sleep(100);
     check(/выполнен фит/.test($("dmStatus").textContent), "опорный фит на «Анализе» помечает иллюстрации устаревшими: " + $("dmStatus").textContent);
   }

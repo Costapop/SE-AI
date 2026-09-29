@@ -193,11 +193,12 @@ footer p { margin: 4px 0; }
 .fig:fullscreen .fig-sub, .fig:fullscreen .fig-note { font-size: 16px; }
 .fig:fullscreen .fig-legend { font-size: 16px; gap: 6px 20px; margin: 6px 0 8px; }
 .fig:fullscreen .fig-legend button.lg .sw { width: 18px; height: 4px; }
-.fig:fullscreen .chart.demo, .fig:fullscreen .chart { height: calc(100vh - 150px); }
+/* высоты в полноэкранном режиме: заголовок, переключатели, подпись под графиком (до 4 строк) и поля занимают до ≈ 200 px — фигура должна умещаться без прокрутки (проверено при высоте 900 px) */
+.fig:fullscreen .chart.demo, .fig:fullscreen .chart { height: calc(100vh - 200px); }
 .fig:fullscreen .minis .chart { height: calc((100vh - 200px) / 3); }
-.fig:fullscreen .grid2 .chart.demo, .fig:fullscreen .grid2 .chart { height: calc(100vh - 170px); }
-/* сетка 2 × 2 (якорные паттерны): заголовок, переключатель единиц, общая легенда, промежуток и подпись под сеткой занимают ≈ 250 px — две строки панелей должны уместиться без прокрутки */
-.fig:fullscreen .grid2x2 .chart.demo { height: calc((100vh - 250px) / 2); min-height: 220px; }
+.fig:fullscreen .grid2 .chart.demo, .fig:fullscreen .grid2 .chart { height: calc(100vh - 200px); }
+/* сетка 2 × 2 (якорные паттерны): заголовок, переключатель единиц, общая легенда, промежуток, подпись под сеткой (4 строки) и поля занимают ≈ 320 px — две строки панелей должны уместиться без прокрутки */
+.fig:fullscreen .grid2x2 .chart.demo { height: calc((100vh - 335px) / 2); min-height: 220px; }
 .minis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 14px; }
 @media (max-width: 1200px) { .minis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .minis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

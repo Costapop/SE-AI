@@ -1,5 +1,6 @@
 /* Дымовой тест интерфейса в jsdom: встроенный образец, симуляция с большим градиентом, симуляция с поглощением,
-   образец с задней стороной подложки, очистка панелей, страница «Иллюстрации» (задняя сторона и прибор — со страницы «Анализ», закрепление и возврат; таблицы фигур; устаревание).
+   образец с задней стороной подложки, очистка панелей, страница «Иллюстрации» (задняя сторона и прибор — со страницы «Анализ», размеры дефектов —
+   из окончательного фита или полей симулятора, закрепление и возврат; нуль в размере дефекта; таблицы фигур; устаревание).
    Запуск: npm install && node test/ui_smoke.js   (≈25–60 мин на одном ядре: полоса в модели и задняя сторона удорожают фиты; jsdom в 3–8 раз медленнее браузера) */
 const { JSDOM } = require("jsdom"); const fs = require("fs"), path = require("path");
 let html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
@@ -55,6 +56,12 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   check(/доля задней стороны как у образца/.test(txt($("causeOut"))), "в бюджете отклонения есть строка про долю задней стороны");
   const dErr = num((tr4["d, нм"][2].match(/ошибка ([-−]?[\d.]+)/) || [])[1]);
   check(Math.abs(dErr) < 1.5, `толщина найдена с ошибкой ${dErr} нм`);
+  // размеры дефектов для страницы «Иллюстрации» — из окончательного фита (|δ|, слой, k₄₀₀ включённых дефектов; не включённый → умолчание)
+  { const found = (row, def) => { const m = tr4[row][2].match(/найдено ([-−]?[\d.]+)/); if (!m || /не включ/.test(tr4[row][2])) return { v: String(def), zero: true }; const v = Math.abs(num(m[1])); return { v: String(+v.toFixed(2)), zero: false }; };
+    const eD = found("δ, %", 1), eR = found("EMA-слой, нм", 2), eK = found("Поглощение: k хвоста при 400 нм", 1);
+    check($("dmDelta").value === eD.v && $("dmRough").value === eR.v && $("dmK").value === eK.v && /из окончательного фита на странице «Анализ»/.test($("dmSizesSrc").textContent) && $("dmSizesReset").hidden, `размеры дефектов иллюстраций подставлены из окончательного фита: |δ| ${$("dmDelta").value} (найдено ${tr4["δ, %"][2]}), слой ${$("dmRough").value}, k₄₀₀ ${$("dmK").value} — ${$("dmSizesSrc").textContent}`);
+    check((eK.zero ? /хвост поглощения не включён в фит → k₄₀₀ 1\.0 по умолчанию/ : /^(?!.*не включён)/).test($("dmSizesSrc").textContent), `не включённый в фит дефект заменён умолчанием: ${$("dmSizesSrc").textContent}`);
+    check(/выполнен фит/.test($("dmStatus").textContent) === false || /взяты из окончательного фита/.test($("dmStatus").textContent), `строка состояния иллюстраций: ${$("dmStatus").textContent || "(иллюстрации ещё не строились)"}`); }
   console.log("5. Снятие флажка задней стороны сбрасывает шаги, установка обратно — тоже");
   $("ckBack").click(); await new Promise(r => setTimeout(r, 50));
   check(/Нажмите «Опорный фит»/.test(txt($("refOut"))) && $("backF").disabled && /задней стороны нет/.test($("dataInfo").textContent), "панели сброшены, поля задней стороны отключены");
@@ -74,11 +81,21 @@ const truthRows = () => Object.fromEntries([...$("truthOut").querySelectorAll("t
   check(/истина/.test(txt($("dmDispTable"))) && /опорный фит/.test(txt($("dmDispTable"))) && $("dmFormula").querySelectorAll(".f-plain").length === 4, "таблица дисперсии со столбцами истины и опорного фита, формулы (текстовый вариант без KaTeX)");
   check(/находит d = /.test(txt($("backFitNote"))) && $("dmBackSub").value === "silica" && $("dmBackF").value === "0.95" && $("dmBackReset").hidden && /со страницы «Анализ»/.test($("dmBackSrc").textContent), "задняя сторона: подложка и доля взяты из условий (кварц, 0.95): " + txt($("backFitNote")).slice(0, 80));
   check($("dmInstrReset").hidden && /Симулятор измерения/.test($("dmInstrSrc").textContent) && $("dmIbw").value === $("simBw").value, "прибор: параметры взяты из симулятора: " + $("dmInstrSrc").textContent);
+  // окончательного фита после повторного шага 1 нет → размеры дефектов из полей «Дефекты» симулятора (сценарий 3: δ = 0, слой 1.0, k₄₀₀ 1.5)
+  check($("dmDelta").value === "1" && $("dmRough").value === "1" && $("dmK").value === "1.5" && $("dmSizesReset").hidden && /симулятора/.test($("dmSizesSrc").textContent) && /градиент в симуляторе 0 → \|δ\| 1\.0 по умолчанию/.test($("dmSizesSrc").textContent), `размеры дефектов — из полей «Дефекты» симулятора (δ = 0 → 1 %, слой 1 нм, k₄₀₀ 1.5): ${$("dmDelta").value}; ${$("dmRough").value}; ${$("dmK").value} — ${$("dmSizesSrc").textContent}`);
+  check(/δ = ±1\.0 %, слой 1\.0 нм, k₄₀₀ = 1\.5·10⁻³/.test(txt($("fingerGridSub"))), "подпись сетки отпечатков с этими размерами: " + txt($("fingerGridSub")));
   { const hom = [...$("dmAnchorTable").querySelectorAll("tbody tr")][0]; const cells = [...hom.children].map(c => c.textContent.trim()); check(/однородная/.test(cells[0]) && cells.slice(1).every(v => /^[−-]?0\.000$/.test(v)), "сводка по якорям: у однородной прозрачной плёнки все отклонения точно нули: " + cells.slice(1).join(" | ")); }
   check($("dmInstrTable").querySelectorAll("tbody tr").length === 6 && $("instrFitGrid").querySelectorAll(".mini").length === 6, "эффекты прибора: 6 вариантов");
   { const fig = $("figFingerOverlay"), tb = fig.querySelector('[data-act="table"]'); tb.click(); const t = fig.querySelector(".fig-table table"); const head = t ? [...t.querySelectorAll("thead th")].map(h => h.textContent) : []; check(t && head[0] === "λ, нм" && head.length === 13 && t.querySelectorAll("tbody tr").length === 201, `кнопка «Таблица» выводит значения отпечатков по длине волны (${head.length} столбцов, ${t ? t.querySelectorAll("tbody tr").length : 0} строк)`); tb.click(); check(fig.querySelector(".fig-table").classList.contains("hidden"), "повторное нажатие скрывает таблицу"); }
   $("dmDelta").value = "3"; $("dmDelta").dispatchEvent(new w.Event("change"));
   check(/изменились/.test($("dmStatus").textContent), "смена размера дефекта помечает иллюстрации устаревшими");
+  check(!$("dmSizesReset").hidden && /заданы здесь: \|δ\|/.test($("dmSizesSrc").textContent) && /симулятора[^:]*: EMA-слой, k₄₀₀/.test($("dmSizesSrc").textContent), "изменённый размер закреплён за страницей, остальные — из симулятора: " + $("dmSizesSrc").textContent);
+  $("simDelta").value = "-2.5"; $("simDelta").dispatchEvent(new w.Event("input")); $("simRough").value = "0.7"; $("simRough").dispatchEvent(new w.Event("input"));
+  check($("dmDelta").value === "3" && $("dmRough").value === "0.7", `смена размеров в симуляторе: закреплённое |δ| осталось 3, слой обновился до 0.7 (${$("dmDelta").value}; ${$("dmRough").value})`);
+  $("dmK").value = "0"; $("dmK").dispatchEvent(new w.Event("change"));
+  check(/k₄₀₀ = 0 \(нулевой дефект отпечатка не даёт\)/.test($("dmStatus").textContent) && $("dmK").classList.contains("invalid"), "нуль k₄₀₀ назван недопустимым, поле подсвечено: " + $("dmStatus").textContent);
+  $("dmSizesReset").click(); { const t0 = Date.now(); while (!/^Готово|^Ошибка|^Размеры/.test($("dmStatus").textContent) && Date.now() - t0 < 600000) await new Promise(r => setTimeout(r, 200)); }
+  check($("dmDelta").value === "2.5" && $("dmK").value === "1.5" && !$("dmK").classList.contains("invalid") && $("dmSizesReset").hidden && /^Готово/.test($("dmStatus").textContent) && /δ = ±2\.5 %, слой 0\.7 нм, k₄₀₀ = 1\.5·10⁻³/.test(txt($("fingerGridSub"))), `кнопка «Как на «Анализе»» вернула размеры из симулятора (|δ| = ${$("dmDelta").value}, k₄₀₀ = ${$("dmK").value}) и перестроила иллюстрации: ${txt($("fingerGridSub"))}`);
   $("dmBackSub").value = "bk7"; $("dmBackSub").dispatchEvent(new w.Event("change"));
   check(!$("dmBackReset").hidden && /заданы здесь: подложка/.test($("dmBackSrc").textContent), "подложка раздела «Задняя сторона» закреплена за страницей: " + $("dmBackSrc").textContent);
   $("dmBackReset").click(); { const t0 = Date.now(); while (!/пересчитана|Ошибка/.test($("dmStatus").textContent) && Date.now() - t0 < 120000) await new Promise(r => setTimeout(r, 100)); }

@@ -1,6 +1,8 @@
 /* Прогон страницы «Иллюстрации» по встроенным образцам в jsdom: для каждого образца строятся все разделы, затем проверяются
-   тексты (сведения, подписи, таблицы, формулы), ряды графиков (NaN, пустые ряды, подписи легенд, оси) и согласованность
-   с расчётом ядра. Запуск: npm install && node test/demo_all.js [ex1,ex5,...] [--json файл]   (≈1–3 мин на образец; jsdom медленнее браузера) */
+   тексты (сведения, подписи, таблицы, формулы), ряды графиков (NaN, пустые ряды, подписи легенд, оси), согласованность
+   с расчётом ядра и подстановка условий со страницы «Анализ» (задняя сторона, прибор, размеры дефектов из полей симулятора);
+   в конце — сценарий синхронизации (смена материала, закрепление и возврат полей, нуль в размере дефекта, устаревание после фита).
+   Запуск: npm install && node test/demo_all.js [ex1,ex5,...] [--json файл]   (≈1–3 мин на образец; jsdom медленнее браузера) */
 const { JSDOM } = require("jsdom"); const fs = require("fs"), path = require("path");
 const E = require("../src/ellip_core.js");
 const args = process.argv.slice(2), jsonAt = args.indexOf("--json"), jsonFile = jsonAt >= 0 ? args[jsonAt + 1] : null;
@@ -18,6 +20,10 @@ const check = (ok, msg) => { console.log((ok ? "  ok   " : "  FAIL ") + msg); if
 const warn = (msg) => console.log("  warn " + msg);
 w.addEventListener("error", (e) => { console.log("window error:", e.message); failures++; });
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+/** Размер в подписях страницы: до двух знаков без лишнего нуля (1 → «1.0», 0.78 → «0.78»). */
+const fmtS = (v) => (+v).toFixed(2).replace(/(\.\d)0$/, "$1");
+/** Ожидаемое значение поля размера при отсутствии окончательного фита: модуль поля симулятора в границах поля, нуль → умолчание. */
+const expSize = (dm, sim, def) => { const v = Math.abs(+$(sim).value); return String(v > 0 ? Math.min(+$(dm).max, Math.max(+$(dm).min, +v.toFixed(2))) : def); };
 async function waitDemo() { const t0 = Date.now(); while (!/^Готово|^Ошибка/.test($("dmStatus").textContent) && Date.now() - t0 < 900000) await sleep(200); return (Date.now() - t0) / 1000; }
 /** Все графики страницы «Иллюстрации»: id → экземпляр заглушки Chart (через перерисовку берём из S.charts недоступно, поэтому читаем canvas.__chart). */
 const charts = () => { const r = {}; for (const c of w.document.querySelectorAll("#page-demo canvas")) if (c.__chart) r[c.id] = c.__chart; return r; };
@@ -53,7 +59,7 @@ function checkChart(id, c, exp) {
     check(/^Готово/.test(st) && !/Пока шло построение/.test(st), `построено за ${sec.toFixed(0)} с: ${st}`);
     const R = { title: ex.title, sec, status: st, texts: {}, charts: {} };
     // --- тексты
-    for (const id of ["dmBackSrc", "dmInstrSrc", "dmFingerInfo", "fingerOverlaySub", "fingerGridSub", "fingerGridNote", "dmAnchorInfo", "dmDispInfo", "dispSub", "dmBackInfo", "backFitSub", "backFitNote", "dmInstrInfo", "anchUnitsNote"]) R.texts[id] = txt($(id));
+    for (const id of ["dmBackSrc", "dmInstrSrc", "dmSizesSrc", "dmFingerInfo", "fingerOverlaySub", "fingerGridSub", "fingerGridNote", "dmAnchorInfo", "dmDispInfo", "dispSub", "dmBackInfo", "backFitSub", "backFitNote", "dmInstrInfo", "anchUnitsNote"]) R.texts[id] = txt($(id));
     R.texts.fingerMinis = [...$("fingerGrid").querySelectorAll(".mini")].map(m => txt(m.querySelector(".mini-title")) + " — " + txt(m.querySelector(".mini-sub")));
     R.texts.instrRawMinis = [...$("instrRawGrid").querySelectorAll(".mini")].map(m => txt(m.querySelector(".mini-title")) + " — " + txt(m.querySelector(".mini-sub")));
     R.texts.instrFitMinis = [...$("instrFitGrid").querySelectorAll(".mini")].map(m => txt(m.querySelector(".mini-title")) + " — " + txt(m.querySelector(".mini-sub")));
@@ -106,8 +112,11 @@ function checkChart(id, c, exp) {
     // задняя сторона: подложка и доля из условий
     check($("dmBackSub").value === ex.sub && Math.abs(+$("dmBackF").value - (ex.back ? ex.back.f : 1)) < 1e-9, `задняя сторона: подложка ${$("dmBackSub").value}, доля ${$("dmBackF").value}` + (ex.back ? "" : " (на «Анализе» выключена)"));
     check((ex.back ? !/выключена/.test(R.texts.dmBackInfo) : /выключена/.test(R.texts.dmBackInfo)), "сведения о задней стороне согласованы с флажком «Анализа»");
-    // размеры дефектов — поля страницы «Иллюстрации» (в v1.3.3 — свои умолчания 1.0 / 2.0 / 1.0)
-    check(new RegExp(`δ = ±${(+$("dmDelta").value).toFixed(1)} %, слой ${(+$("dmRough").value).toFixed(1)} нм, k₄₀₀ = ${(+$("dmK").value).toFixed(1)}·10⁻³`).test(R.texts.fingerGridSub), `подпись сетки отпечатков = поля размеров: ${R.texts.fingerGridSub}`);
+    // размеры дефектов — незакреплённые поля следуют за страницей «Анализ»: окончательного фита здесь нет, поэтому берутся поля «Дефекты»
+    // симулятора (градиент — по модулю, нуль → умолчание 1 / 2 / 1); подписи фигур — по тем же размерам (до двух знаков без лишнего нуля)
+    check($("dmDelta").value === expSize("dmDelta", "simDelta", 1) && $("dmRough").value === expSize("dmRough", "simRough", 2) && $("dmK").value === expSize("dmK", "simK", 1) && /симулятора/.test(R.texts.dmSizesSrc) && /окончательного фита нет/.test(R.texts.dmSizesSrc) && $("dmSizesReset").hidden, `размеры дефектов — из полей «Дефекты» симулятора (|δ| ${$("dmDelta").value}, слой ${$("dmRough").value}, k₄₀₀ ${$("dmK").value}): ${R.texts.dmSizesSrc}`);
+    check(new RegExp(`δ = ±${fmtS($("dmDelta").value)} %, слой ${fmtS($("dmRough").value)} нм, k₄₀₀ = ${fmtS($("dmK").value)}·10⁻³`).test(R.texts.fingerGridSub), `подпись сетки отпечатков = поля размеров: ${R.texts.fingerGridSub}`);
+    { const leg = (C.cFingerOverlay.data.datasets || []).map(d => d.label); check(leg.some(l => l === `градиент n↑ (δ = +${fmtS($("dmDelta").value)} %)`) && leg.some(l => l === `шероховатость (слой ${fmtS($("dmRough").value)} нм)`) && leg.some(l => l === `поглощение (k₄₀₀ = ${fmtS($("dmK").value)}·10⁻³)`), `легенда одиночных дефектов с теми же размерами: ${leg.join(" | ")}`); }
     check(/со страницы «Анализ»/.test(R.texts.dmBackSrc) && /Симулятор измерения/.test(R.texts.dmInstrSrc) && $("dmBackReset").hidden && $("dmInstrReset").hidden, `источники полей разделов 4–5: ${R.texts.dmBackSrc} | ${R.texts.dmInstrSrc}`);
     out["ex" + (i + 1)] = R;
     console.log("  тексты: " + ["dmFingerInfo", "dmAnchorInfo", "dmDispInfo", "dmBackInfo", "backFitNote", "dmInstrInfo"].map(id => `\n    [${id}] ${R.texts[id]}`).join(""));
@@ -137,6 +146,20 @@ function checkChart(id, c, exp) {
     check($("dmIbw").value === "3" && /заданы здесь: полоса/.test($("dmInstrSrc").textContent), "смена полосы в симуляторе не трогает закреплённое поле: " + $("dmIbw").value);
     $("dmInstrReset").click(); await sleep(300); { const t0 = Date.now(); while (!/пересчитаны|Ошибка/.test($("dmStatus").textContent) && Date.now() - t0 < 120000) await sleep(100); }
     check($("dmInstrReset").hidden && $("dmIbw").value === "0.7" && /пересчитаны/.test($("dmStatus").textContent) && /FWHM 0\.7 нм/.test(txt($("dmInstrTable"))), `кнопка «Как на «Анализе»» вернула полосу ${$("dmIbw").value} из симулятора и пересчитала эффекты: ${$("dmStatus").textContent}`);
+    // размеры дефектов: нуль на странице, закрепление, смена полей «Дефекты» симулятора, кнопка «Как на «Анализе»»
+    $("dmK").value = "0"; $("dmK").dispatchEvent(new w.Event("change"));
+    check(/k₄₀₀ = 0 \(нулевой дефект отпечатка не даёт\) — допустимо 0\.05–50 ×10⁻³/.test($("dmStatus").textContent) && $("dmK").classList.contains("invalid") && /заданы здесь: k₄₀₀/.test(txt($("dmSizesSrc"))) && !$("dmSizesReset").hidden, "нуль k₄₀₀ на странице назван недопустимым, поле подсвечено и закреплено: " + $("dmStatus").textContent);
+    { const subBefore = txt($("fingerGridSub")); $("dmBuild").click(); await sleep(150);
+      check(/^Размеры дефектов вне допустимого: k₄₀₀ = 0/.test($("dmStatus").textContent) && txt($("fingerGridSub")) === subBefore, "с нулём построение не начинается, прежние иллюстрации остаются: " + subBefore); }
+    $("dmK").value = "0.5"; $("dmK").dispatchEvent(new w.Event("change"));
+    check(!$("dmK").classList.contains("invalid") && /Условия иллюстраций изменились/.test($("dmStatus").textContent), "k₄₀₀ = 0.5 допустимо");
+    $("simDelta").value = "-3.3"; $("simDelta").dispatchEvent(new w.Event("input"));
+    check($("dmDelta").value === "3.3" && $("dmK").value === "0.5" && /Размеры дефектов в симуляторе изменились/.test($("dmStatus").textContent), `смена градиента в симуляторе → |δ| = ${$("dmDelta").value} (по модулю), закреплённое k₄₀₀ = ${$("dmK").value}: ${$("dmStatus").textContent}`);
+    $("dmBuild").click(); await waitDemo();
+    check(/^Готово/.test($("dmStatus").textContent) && /δ = ±3\.3 %/.test(txt($("fingerGridSub"))) && /k₄₀₀ = 0\.5·10⁻³/.test(txt($("fingerGridSub"))) && txt($("dmAnchorTable")).includes("k₄₀₀ = 0.5·10⁻³"), "перестроено с этими размерами (подпись сетки и сводка по якорям): " + txt($("fingerGridSub")));
+    $("dmSizesReset").click(); await sleep(100); await waitDemo();
+    check($("dmSizesReset").hidden && $("dmK").value === expSize("dmK", "simK", 1) && /^Готово/.test($("dmStatus").textContent) && new RegExp(`k₄₀₀ = ${fmtS($("dmK").value)}·10⁻³`).test(txt($("fingerGridSub"))), `кнопка «Как на «Анализе»» вернула k₄₀₀ = ${$("dmK").value} (симулятор: ${$("simK").value}) и перестроила иллюстрации: ${txt($("fingerGridSub"))}`);
+    $("simDelta").value = "-0.8"; $("simDelta").dispatchEvent(new w.Event("input"));
     $("btn1").click(); await sleep(100);
     check(/выполнен фит/.test($("dmStatus").textContent), "опорный фит на «Анализе» помечает иллюстрации устаревшими: " + $("dmStatus").textContent);
   }

@@ -176,6 +176,14 @@ footer p { margin: 4px 0; }
 .fig .fig-tools button.on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .fig .chart.demo { height: 380px; }
 .fig .chart.demo.short { height: 300px; }
+/* общая легенда фигуры (якорные паттерны): одна на четыре панели, щелчок скрывает ряд на всех */
+.fig-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 2px 0 4px; font-size: 13px; }
+.fig-legend:empty { display: none; }
+.fig-legend button.lg { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px; border: 0; border-radius: 5px; background: transparent; color: var(--text); font-size: inherit; font-weight: 500; line-height: 1.3; cursor: pointer; }
+.fig-legend button.lg:hover { background: var(--surface2); }
+.fig-legend button.lg .sw { width: 14px; height: 3px; border-radius: 2px; flex: none; box-shadow: 0 0 0 3px transparent; }
+.fig-legend button.lg.off { color: var(--muted); text-decoration: line-through; }
+.fig-legend button.lg.off .sw { opacity: .35; }
 .fig .fig-note { font-size: 13.5px; color: var(--muted); margin: 4px 0 6px; max-width: 110ch; }
 .fig .fig-table { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; }
 .fig .fig-table table { margin: 0; font-size: 13px; }
@@ -183,10 +191,14 @@ footer p { margin: 4px 0; }
 .fig:fullscreen { overflow: auto; padding: 24px 32px; background: var(--surface); --font: 18px; }
 .fig:fullscreen .fig-title { font-size: 22px; }
 .fig:fullscreen .fig-sub, .fig:fullscreen .fig-note { font-size: 16px; }
-.fig:fullscreen .chart.demo, .fig:fullscreen .chart { height: calc(100vh - 150px); }
+.fig:fullscreen .fig-legend { font-size: 16px; gap: 6px 20px; margin: 6px 0 8px; }
+.fig:fullscreen .fig-legend button.lg .sw { width: 18px; height: 4px; }
+/* высоты в полноэкранном режиме: заголовок, переключатели, подпись под графиком (до 4 строк) и поля занимают до ≈ 200 px — фигура должна умещаться без прокрутки (проверено при высоте 900 px) */
+.fig:fullscreen .chart.demo, .fig:fullscreen .chart { height: calc(100vh - 200px); }
 .fig:fullscreen .minis .chart { height: calc((100vh - 200px) / 3); }
-.fig:fullscreen .grid2 .chart.demo, .fig:fullscreen .grid2 .chart { height: calc(100vh - 170px); }
-.fig:fullscreen .grid2x2 .chart.demo { height: calc((100vh - 170px) / 2); }
+.fig:fullscreen .grid2 .chart.demo, .fig:fullscreen .grid2 .chart { height: calc(100vh - 200px); }
+/* сетка 2 × 2 (якорные паттерны): заголовок, переключатель единиц, общая легенда, промежуток, подпись под сеткой (4 строки) и поля занимают ≈ 320 px — две строки панелей должны уместиться без прокрутки */
+.fig:fullscreen .grid2x2 .chart.demo { height: calc((100vh - 335px) / 2); min-height: 220px; }
 .minis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 14px; }
 @media (max-width: 1200px) { .minis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .minis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -232,7 +244,7 @@ footer p { margin: 4px 0; }
 </head>
 <body>
 <header class="appbar">
-  <div class="brand"><h1><span>SE-AI</span><span class="b2"> · Дефекты плёнки по остатку эллипсометрического фита</span></h1><span class="ver" id="appVer">v2.1.0</span></div>
+  <div class="brand"><h1><span>SE-AI</span><span class="b2"> · Дефекты плёнки по остатку эллипсометрического фита</span></h1><span class="ver" id="appVer">v2.2.0</span></div>
   <nav aria-label="Страницы"><a href="#analysis" data-page="analysis" class="active">Анализ</a><a href="#demo" data-page="demo">Иллюстрации</a></nav>
   <div class="tools">
     <span class="seg" role="group" aria-label="Тема оформления"><button type="button" data-theme="auto" title="Как в системе">Авто</button><button type="button" data-theme="light" title="Светлая тема">Светлая</button><button type="button" data-theme="dark" title="Тёмная тема">Тёмная</button></span>
@@ -445,7 +457,7 @@ footer p { margin: 4px 0; }
 <aside>
   <div class="card">
     <div class="card-head"><h2>Условия иллюстраций</h2><button type="button" class="help-toggle" data-card-help aria-pressed="false">Подсказки</button></div>
-    <p class="note">Материал, подложка, угол, задняя сторона и шум σ(λ) берутся со страницы «Анализ» (текущий спектр и «Априорные условия»). Размеры дефектов — из окончательного фита «Анализа» (|δ|), а пока его нет — из полей «Дефекты» симулятора; параметры задней стороны и эффектов прибора в разделах 4–5 — из её панелей; и те и другие следуют за «Анализом», пока их не изменить здесь.</p>
+    <p class="note">Материал, подложка, угол, задняя сторона и шум σ(λ) берутся со страницы «Анализ» (текущий спектр и «Априорные условия»). Размеры дефектов — из окончательного фита «Анализа» (|δ| по модулю), а дефект, которого в фите нет, — из полей «Дефекты» симулятора; параметры задней стороны и эффектов прибора в разделах 4–5 — из её панелей; и те и другие следуют за «Анализом», пока их не изменить здесь.</p>
     <label for="dmSource">Параметры плёнки</label>
     <select id="dmSource">
       <option value="ref">опорный фит текущего спектра</option>
@@ -515,11 +527,12 @@ footer p { margin: 4px 0; }
     <figure class="fig" data-fig="se-ai_anchors_patterns" id="figAnchPat">
       <figcaption><span class="fig-title">Якорные паттерны: отклонение от подложки в HW- и QW-якорях</span><span class="fig-tools"></span></figcaption>
       <div class="fig-ctl"><span class="seg" id="anchUnits"><button type="button" data-u="deg" class="on">в градусах</button><button type="button" data-u="sig">в единицах σ</button></span><span id="anchUnitsNote"></span></div>
+      <div class="fig-legend" id="anchLegend" aria-label="Варианты плёнки: щелчок скрывает или показывает ряд на всех четырёх панелях"></div>
       <div class="grid2x2">
         <div class="chart demo short"><canvas id="cAnchPsiHW"></canvas></div><div class="chart demo short"><canvas id="cAnchPsiQW"></canvas></div>
         <div class="chart demo short"><canvas id="cAnchDelHW"></canvas></div><div class="chart demo short"><canvas id="cAnchDelQW"></canvas></div>
       </div>
-      <div class="fig-note">Ψ − Ψ<sub>подл</sub> и Δ − Δ<sub>подл</sub> (для QW — за вычетом 180°) точно в якорях однородной плёнки; в QW-якорях Ψ сравнивается с однородной плёнкой, потому что там плёнка не «исчезает». У однородной прозрачной плёнки в HW-якорях обе величины — нули (у материала с поглощением в диапазоне Ψ-отклонение однородной плёнки в синих якорях отлично от нуля — это не дефект); у градиента Ψ-отклонение в HW примерно постоянно по диапазону (его знак — знак δ), у поглощения оно растёт к синему краю, у шероховатости выражено Δ-отклонение.</div>
+      <div class="fig-note">Ψ − Ψ<sub>подл</sub> и Δ − Δ<sub>подл</sub> (для QW — за вычетом 180°) точно в якорях однородной плёнки; в QW-якорях Ψ сравнивается с однородной плёнкой, потому что там плёнка не «исчезает». У однородной прозрачной плёнки в HW-якорях обе величины — нули (у материала с поглощением в диапазоне Ψ-отклонение однородной плёнки в синих якорях отлично от нуля — это не дефект); у градиента Ψ-отклонение в HW примерно постоянно по диапазону (его знак — знак δ), у поглощения оно растёт к синему краю, у шероховатости выражено Δ-отклонение. Щелчок по варианту в легенде любой панели скрывает или показывает его на всех четырёх.</div>
       <div class="fig-table hidden"></div>
     </figure>
     <div id="dmAnchorTable"></div>
@@ -625,7 +638,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
 (function () {
   'use strict';
   const E = window.EllipCore;
-  const APP_VERSION = '2.1.0';
+  const APP_VERSION = '2.2.0';
   const $ = (id) => document.getElementById(id);
   const S = { data: null, example: null, cfg: null, prior: null, ref: null, train: null, probs: null, choice: null, fin: null, charts: {}, redraw: {} };
   const MINUS = '−';
@@ -826,12 +839,13 @@ const EXAMPLES = /*__EXAMPLES__*/[];
       return `${ids.length > 1 && title ? `<p class="note" style="margin:6px 8px 2px"><b>${esc(title)}</b></p>` : ''}<table><thead><tr><th class="${labels ? '' : 'num'}">${esc(xt)}</th>${cols.map(t => `<th class="num">${esc(t)}</th>`).join('')}</tr></thead><tbody>${keys.map(k => `<tr><td class="${labels ? '' : 'num'}">${labels ? esc(k) : fmtVal(k)}</td>${xs.get(k).map(v => `<td class="num">${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     }).join('');
   }
-  /** Экспорт графика в PNG (тройное разрешение, фон карточки). */
+  /** Экспорт графика в PNG (тройное разрешение, фон карточки). У панелей с общей легендой над сеткой (chart.$pngLegend) легенда на время экспорта включается в самом графике. */
   function exportPng(chart, name) {
     if (!chart || !chart.canvas || !chart.canvas.toBlob) return;
+    const leg = chart.options.plugins && chart.options.plugins.legend, legWas = leg ? leg.display : undefined; if (leg && chart.$pngLegend) leg.display = true;
     const dpr = chart.options.devicePixelRatio; chart.options.devicePixelRatio = 3; chart.resize(); chart.update('none');
     const file = name.replace(/[\\/:*?"<>|]+/g, '_') + '.png';
-    const restore = () => { chart.options.devicePixelRatio = dpr; chart.resize(); chart.update('none'); };
+    const restore = () => { chart.options.devicePixelRatio = dpr; if (leg) leg.display = legWas; chart.resize(); chart.update('none'); };
     chart.canvas.toBlob((blob) => {
       restore(); if (!blob) return;
       const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = file; document.body.appendChild(a); a.click(); a.remove();
@@ -1242,9 +1256,9 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     simCont: ['gradient', 'Как считать истинный спектр при градиенте: непрерывный профиль n(z) через уравнение Риккати для локальной функции отражения (Фурман–Тихонравов, 1.1.19–1.1.20; RK4, шаг 0.5 нм) или лестница из 40 однородных подслоёв, как в модели фита. Непрерывный вариант точнее и на 1–2 с дольше.'],
     simDrD: ['drift', 'Дрейф калибровки Δ, градусы: смещение плюс случайный наклон по диапазону в пределах ±этого значения.'],
     dmSource: ['source', 'Чьи параметры плёнки (толщина и дисперсия) лежат в основе иллюстраций: найденные опорным фитом текущего спектра (по умолчанию; при необходимости опорный фит выполняется автоматически), истина встроенного или симулированного образца, либо справочная дисперсия при номинальной толщине.'],
-    dmDelta: ['gradient', 'Величина градиента показателя в иллюстрациях, %: классы с градиентом строятся с δ = ±это значение. По умолчанию — модуль градиента, найденного окончательным фитом на странице «Анализ», а пока фита нет — модуль поля «Градиент δ» симулятора; нуль (дефекта нет) заменяется на 1 %, потому что нулевой дефект отпечатка не даёт. Изменённое здесь значение закрепляется, кнопка «Как на «Анализе»» возвращает подстановку. Допустимо 0.05–20 %.'],
-    dmRough: ['roughness', 'Толщина EMA-слоя шероховатости в иллюстрациях, нм. По умолчанию — слой, найденный окончательным фитом на странице «Анализ», а пока фита нет — поле «EMA-слой» симулятора; нуль заменяется на 2 нм. Допустимо 0.05–12 нм.'],
-    dmK: ['absorption', 'Размер хвоста поглощения в иллюстрациях — k хвоста при 400 нм, ×10⁻³. По умолчанию — k₄₀₀, найденное окончательным фитом на странице «Анализ», а пока фита нет — поле «k₄₀₀ хвоста» симулятора; нуль заменяется на 1.0. Допустимо 0.05–50.'],
+    dmDelta: ['gradient', 'Величина градиента показателя в иллюстрациях, %: классы с градиентом строятся с δ = ±это значение. По умолчанию — модуль градиента, найденного окончательным фитом на странице «Анализ»; если градиента в фите нет (не включён, убран вето, фит не выполнен) — модуль поля «Градиент δ» симулятора; нуль и там заменяется на 1 %, потому что нулевой дефект отпечатка не даёт. Изменённое здесь значение закрепляется, кнопка «Как на «Анализе»» возвращает подстановку. Допустимо 0.05–20 %.'],
+    dmRough: ['roughness', 'Толщина EMA-слоя шероховатости в иллюстрациях, нм. По умолчанию — слой, найденный окончательным фитом на странице «Анализ»; если слоя в фите нет — поле «EMA-слой» симулятора; нуль и там заменяется на 2 нм. Допустимо 0.05–12 нм.'],
+    dmK: ['absorption', 'Размер хвоста поглощения в иллюстрациях — k хвоста при 400 нм, ×10⁻³. По умолчанию — k₄₀₀, найденное окончательным фитом на странице «Анализ»; если поглощения в фите нет — поле «k₄₀₀ хвоста» симулятора; нуль и там заменяется на 1.0. Допустимо 0.05–50.'],
     dmInstr: ['bandwidth', 'Если включено, к спектрам классов дефектов добавляются эффекты прибора с параметрами из панели «Симулятор измерения» (полоса, ошибка угла, сдвиг шкалы λ, дрейф, шум): отпечатки становятся «как в измерении». Выключено — отпечатки чистые, только от дефектов.'],
   };
   function decorateFields() {
@@ -1293,8 +1307,9 @@ const EXAMPLES = /*__EXAMPLES__*/[];
 
   // ================================================================ страница «Иллюстрации»
   // DM.cfg / DM.prior — условия иллюстраций: снимок полей страницы «Анализ» на момент построения, отдельный от DM.cfg / DM.prior шагов 1–4
-  // DM.sz — размеры дефектов, с которыми построены иллюстрации (снимок полей на момент построения: подписи и легенды — по нему, а не по полям)
-  const DM = { res: {}, base: null, ref: null, cfg: null, prior: null, sz: null, building: false, stale: true, staleAgain: null, view: 'plane', scale: 'common', anchUnits: 'deg', backUnits: 'deg' };
+  // DM.sz — размеры дефектов, с которыми построены иллюстрации (снимок полей на момент построения: подписи и легенды — по нему, а не по полям);
+  // DM.anchHidden — варианты плёнки, скрытые щелчком в легенде якорных паттернов (общие для четырёх панелей, переживают перерисовку)
+  const DM = { res: {}, base: null, ref: null, cfg: null, prior: null, sz: null, anchHidden: new Set(), anchToggle: null, building: false, stale: true, staleAgain: null, view: 'plane', scale: 'common', anchUnits: 'deg', backUnits: 'deg' };
   const dmCfgRef = () => Object.assign({}, DM.cfg, { band: null });          // как dmCfgRef(), но от условий иллюстраций
   const dmMatOf = (P) => Object.assign({}, DM.cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak || 0 });
   /** Варианты дефектов для иллюстраций: фиксированный порядок и фиксированные цвета (цвет следует за сущностью). */
@@ -1353,25 +1368,28 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   const fmtKs = (k) => fmtS(1000 * k) + '·10⁻³';
   const sizeLabel = (dv, sz) => dv.g ? `δ = ${dv.g > 0 ? '+' : MINUS}${fmtS(100 * sz.delta)} %` : dv.r ? `слой ${fmtS(sz.rough)} нм` : dv.a ? `k₄₀₀ = ${fmtKs(sz.k400)}` : '';
   const legendLabel = (dv, sz) => dv.short + (sizeLabel(dv, sz) ? ` (${sizeLabel(dv, sz)})` : '');
-  // Размеры по умолчанию — со страницы «Анализ»: из окончательного фита текущего спектра (|δ|, слой, k₄₀₀ найденных дефектов),
-  // а пока его нет — из полей «Дефекты» панели «Симулятор измерения» (градиент — по модулю). Нуль (дефект не включён в фит или
-  // убран вето; нуль в симуляторе) заменяется встроенным умолчанием 1 % / 2 нм / 1.0·10⁻³: нулевой дефект отпечатка не даёт.
+  // Размеры по умолчанию — со страницы «Анализ», для каждого дефекта отдельно: из окончательного фита текущего спектра, если дефект
+  // в него включён (|δ|, слой, k₄₀₀ по найденным значениям); иначе — из поля «Дефекты» панели «Симулятор измерения» (градиент — по модулю),
+  // если оно не нуль; иначе — встроенное умолчание 1 % / 2 нм / 1.0·10⁻³ (нулевой дефект отпечатка не даёт). Так дефект, которого фит
+  // не нашёл, но который задан в симуляторе, всё равно приходит с «Анализа», а не остаётся умолчанием.
   // Поле, изменённое здесь, закрепляется за страницей до кнопки «Как на «Анализе»» — как поля разделов «Задняя сторона» и «Прибор».
-  const SIZE_SRC = { dmDelta: { sim: 'simDelta', def: 1, fin: (P, f) => (f.grad ? 100 * Math.abs(P.delta) : 0) }, dmRough: { sim: 'simRough', def: 2, fin: (P, f) => (f.rough ? P.dRough : 0) }, dmK: { sim: 'simK', def: 1, fin: (P, f) => (f.abs ? 1000 * P.k400 : 0) } };
+  const SIZE_SRC = { dmDelta: { sim: 'simDelta', def: 1, inFit: (f) => f.grad, fin: (P) => 100 * Math.abs(P.delta) }, dmRough: { sim: 'simRough', def: 2, inFit: (f) => f.rough, fin: (P) => P.dRough }, dmK: { sim: 'simK', def: 1, inFit: (f) => f.abs, fin: (P) => 1000 * P.k400 } };
   const finSizes = () => ((S.fin && S.finFlags) ? { P: S.fin.P, flags: S.finFlags } : null);
-  /** Размер для поля id со страницы «Анализ»: {v, zero} — значение в границах поля (два знака) или умолчание, если там нуль. */
+  /** Размер для поля id со страницы «Анализ»: {v, src} — значение в границах поля (два знака) и его источник: 'fit' (окончательный фит),
+   *  'sim' (поле симулятора) или 'def' (умолчание: в фит не включён или фита нет, в симуляторе нуль). */
   function analysisSize(id) {
-    const c = SIZE_SRC[id], el = $(id), fin = finSizes(); const v = fin ? c.fin(fin.P, fin.flags) : Math.abs(+$(c.sim).value);
-    if (!(v > 0) || !isFinite(v)) return { v: c.def, zero: true };
-    return { v: Math.min(+el.max, Math.max(+el.min, +v.toFixed(2))), zero: false };
+    const c = SIZE_SRC[id], el = $(id), fin = finSizes(), ok = (x) => x > 0 && isFinite(x);
+    let v = NaN, src = 'def';
+    if (fin && c.inFit(fin.flags)) { v = c.fin(fin.P); src = 'fit'; }
+    if (!ok(v)) { v = Math.abs(+$(c.sim).value); src = 'sim'; }
+    if (!ok(v)) return { v: c.def, src: 'def' };
+    return { v: Math.min(+el.max, Math.max(+el.min, +v.toFixed(2))), src };
   }
   function sizesSrcInfo() {
-    const ids = Object.keys(SIZE_SRC), own = ids.filter(id => $(id).dataset.user === '1'), auto = ids.filter(id => $(id).dataset.user !== '1'), nm = (id) => SIZE_FIELDS[id].name;
-    const fin = finSizes(), from = fin ? 'из окончательного фита на странице «Анализ»' : 'из полей «Дефекты» симулятора на странице «Анализ» (окончательного фита нет)';
-    const zero = auto.filter(id => analysisSize(id).zero);
-    let t = own.length ? `заданы здесь: ${own.map(nm).join(', ')}` + (auto.length ? `; ${from}: ${auto.map(nm).join(', ')}` : '') : `размеры — ${from}`;
-    if (zero.length) t += `; ${zero.map(id => `${SIZE_FIELDS[id].defect} ${fin ? 'не включён в фит' : 'в симуляторе 0'} → ${nm(id)} ${fmtS(SIZE_SRC[id].def)} по умолчанию`).join(', ')}`;
-    $('dmSizesSrc').textContent = t; $('dmSizesReset').hidden = !own.length;
+    const ids = Object.keys(SIZE_SRC), own = ids.filter(id => $(id).dataset.user === '1'), fin = finSizes();
+    const parts = ids.map(id => { const c = SIZE_FIELDS[id]; if ($(id).dataset.user === '1') return `${c.name} — задано здесь`; const a = analysisSize(id);
+      return `${c.name} — ${a.src === 'fit' ? 'окончательный фит' : a.src === 'sim' ? 'симулятор' : `${fmtS(SIZE_SRC[id].def)} по умолчанию (${c.defect} ${fin ? 'в фит не включён, ' : ''}в симуляторе 0)`}`; });
+    $('dmSizesSrc').textContent = `${fin ? 'источники' : 'окончательного фита нет; источники'}: ${parts.join('; ')}`; $('dmSizesReset').hidden = !own.length;
   }
   /** Заполняет со страницы «Анализ» размеры, которые не меняли здесь; true — если хоть одно поле изменилось. */
   function sizesFromAnalysis() {
@@ -1526,15 +1544,30 @@ const EXAMPLES = /*__EXAMPLES__*/[];
       o.plugins.guides = { yLines: lvl, xLines: anchorLines() };
       return new Chart($('cAnchPhase'), { type: 'line', data: { datasets: vds('phase') }, options: o });
     });
+    // Якорные паттерны: четыре панели с одними и теми же пятью рядами и одной общей легендой над сеткой (легенда в каждой панели съедала
+    // бы треть высоты, а легенда только в первой, как раньше, делала панели неравными и не управляла остальными). Щелчок по варианту
+    // в общей легенде скрывает или показывает его сразу на всех четырёх панелях; состояние (DM.anchHidden) переживает перерисовку —
+    // смену единиц, темы, полноэкранный режим. Оси λ у всех панелей одинаковы (диапазон измерения); в PNG каждой панели легенда рисуется.
+    const ANCH_IDS = ['cAnchPsiHW', 'cAnchPsiQW', 'cAnchDelHW', 'cAnchDelQW'];
+    const renderAnchLegend = () => { $('anchLegend').innerHTML = A.variants.map((v, j) => `<button type="button" class="lg${DM.anchHidden.has(v.def.key) ? ' off' : ''}" data-j="${j}" title="Скрыть или показать на всех четырёх панелях"><span class="sw" style="background:var(${v.def.color})"></span>${esc(legendLabel(v.def, sz))}</button>`).join(''); };
+    const toggleAnchVariant = (j) => {
+      const key = A.variants[j].def.key; if (DM.anchHidden.has(key)) DM.anchHidden.delete(key); else DM.anchHidden.add(key);
+      const visible = !DM.anchHidden.has(key);
+      ANCH_IDS.forEach(cid => { const ch = S.charts[cid]; if (!ch) return; if (ch.setDatasetVisibility) ch.setDatasetVisibility(j, visible); else if (ch.data.datasets[j]) ch.data.datasets[j].hidden = !visible; ch.update(); });
+      renderAnchLegend();
+    };
+    renderAnchLegend();
     const patChart = (id, kind, comp, title) => makeChart(id, () => {
       const P = A.pat[kind]; const sig = comp === 'psi' ? P.sigPsi : P.sigDel;
-      const o = baseOpts('λ якоря, нм', sigU ? 'отклонение, σ' : 'отклонение, град'); o.plugins.title = { display: true, text: title, color: css('--text'), font: { size: fs(13), weight: '600' } }; o.plugins.guides = { yLines: [{ y: 0, color: css('--line') }] };
-      o.plugins.legend.display = id === 'cAnchPsiHW'; o.interaction = { mode: 'nearest', intersect: false };
-      const ds = A.variants.map((v, j) => ({ label: legendLabel(v.def, sz), data: pts(P.lam, P[comp][j].map((val, k) => sigU ? val / sig[k] : val)), borderColor: defColor(v.def), backgroundColor: defColor(v.def), borderWidth: 1.5, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: css('--surface'), pointBorderWidth: 1.5 }));
-      return new Chart($(id), { type: 'line', data: { datasets: ds }, options: o });
+      const o = baseOpts('λ якоря, нм', sigU ? 'отклонение, σ' : 'отклонение, град'); o.plugins.title = { display: true, text: title, color: css('--text'), font: { size: fs(13), weight: '600' }, padding: { top: 2, bottom: 8 } }; o.plugins.guides = { yLines: [{ y: 0, color: css('--line') }] };
+      o.plugins.legend.display = false; o.interaction = { mode: 'nearest', intersect: false };
+      o.scales.x.min = A.lamF[0]; o.scales.x.max = A.lamF[A.lamF.length - 1];
+      const ds = A.variants.map((v, j) => ({ label: legendLabel(v.def, sz), data: pts(P.lam, P[comp][j].map((val, k) => sigU ? val / sig[k] : val)), borderColor: defColor(v.def), backgroundColor: defColor(v.def), borderWidth: 1.5, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: css('--surface'), pointBorderWidth: 1.5, hidden: DM.anchHidden.has(v.def.key) }));
+      const ch = new Chart($(id), { type: 'line', data: { datasets: ds }, options: o }); ch.$pngLegend = true; return ch;   // $pngLegend — в PNG панели легенда нужна (на экране она общая, над сеткой)
     });
     patChart('cAnchPsiHW', 'HW', 'psi', 'Ψ − Ψ подложки в HW-якорях'); patChart('cAnchPsiQW', 'QW', 'psi', 'Ψ − Ψ однородной плёнки в QW-якорях');
     patChart('cAnchDelHW', 'HW', 'del', 'Δ − Δ подложки в HW-якорях'); patChart('cAnchDelQW', 'QW', 'del', 'Δ − Δ подложки − 180° в QW-якорях');
+    DM.anchToggle = toggleAnchVariant;                                          // обработчик щелчка по общей легенде (навешен один раз ниже)
     $('anchUnitsNote').textContent = sigU ? 'σ(λ) текущего измерения в точках якорей' : '';
     const mean = (a) => a.length ? a.reduce((s, v) => s + v, 0) / a.length : NaN, mabs = (a) => mean(a.map(Math.abs));
     // перепад синие − красные: половины по середине диапазона λ, а если одна пуста — по номеру якоря (как в каналах ядра)
@@ -1549,6 +1582,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     $('dmAnchorInfo').innerHTML = T(`Плёнка: <b>${DM.base.label}</b>, d = ${fmt(DM.base.d, 2)} нм, ${DM.cfg.mat.name}; подложка — ${subShort(DM.cfg.subKey)}${DM.cfg.back ? ' с задней стороной' : ''}. ${anchList}${A.absorbs ? ' Материал поглощает на синем краю: однородная плёнка касается кривой подложки только в красных HW-якорях (см. примечание к сводке).' : ''}`);
   }
   document.querySelectorAll('#anchUnits button').forEach(b => b.addEventListener('click', () => { DM.anchUnits = b.dataset.u; document.querySelectorAll('#anchUnits button').forEach(x => x.classList.toggle('on', x === b)); renderAnchors(); }));
+  $('anchLegend').addEventListener('click', (ev) => { const b = ev.target.closest('button.lg'); if (b && DM.anchToggle) DM.anchToggle(+b.dataset.j); });
 
   // ---------------------------------------------------------------- 3. дисперсия
   function dmDisp(base) {
@@ -1778,7 +1812,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     $(id).dataset.user = '1'; sizesSrcInfo(); DM.stale = true; const bad = sizeProblems();
     $('dmStatus').textContent = bad.length ? `Размеры дефектов вне допустимого: ${bad.join('; ')}.` : 'Условия иллюстраций изменились — нажмите «Построить все иллюстрации».';
   }));
-  // смена полей «Дефекты» в симуляторе переносится в незакреплённые поля, пока размеры не заданы окончательным фитом
+  // смена полей «Дефекты» в симуляторе переносится в незакреплённые поля тех дефектов, которых нет в окончательном фите
   Object.values(SIZE_SRC).forEach(c => $(c.sim).addEventListener('input', () => { if (sizesFromAnalysis()) markStale('Размеры дефектов в симуляторе изменились — иллюстрации будут построены заново.'); }));
   $('dmSizesReset').addEventListener('click', () => { Object.keys(SIZE_SRC).forEach(id => { delete $(id).dataset.user; }); if (sizesFromAnalysis()) { DM.stale = true; if (DM.base && !DM.building) dmBuildAll(); else $('dmStatus').textContent = 'Размеры дефектов снова со страницы «Анализ» — нажмите «Построить все иллюстрации».'; } });
   // параметры прибора в симуляторе: незакреплённые поля раздела «Прибор» следуют за ними; отпечатки «с эффектами прибора» тоже от них зависят

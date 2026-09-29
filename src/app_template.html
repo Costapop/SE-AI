@@ -88,6 +88,7 @@ label.lbl { display: flex; align-items: center; gap: 5px; }
 label.lbl .lbl-text { min-width: 0; }
 input[type=number], input[type=text], select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface2); color: var(--text); font: inherit; font-size: 14px; font-variant-numeric: tabular-nums; }
 input[type=number]:disabled, select:disabled { opacity: .55; }
+input[type=number].invalid { border-color: var(--del); box-shadow: 0 0 0 2px color-mix(in srgb, var(--del) 22%, transparent); }
 input[type=file] { width: 100%; font-size: 13px; color: var(--muted); }
 input[type=range] { width: 100%; accent-color: var(--accent); }
 input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; flex: none; }
@@ -231,7 +232,7 @@ footer p { margin: 4px 0; }
 </head>
 <body>
 <header class="appbar">
-  <div class="brand"><h1><span>SE-AI</span><span class="b2"> · Дефекты плёнки по остатку эллипсометрического фита</span></h1><span class="ver" id="appVer">v2.0.0</span></div>
+  <div class="brand"><h1><span>SE-AI</span><span class="b2"> · Дефекты плёнки по остатку эллипсометрического фита</span></h1><span class="ver" id="appVer">v2.1.0</span></div>
   <nav aria-label="Страницы"><a href="#analysis" data-page="analysis" class="active">Анализ</a><a href="#demo" data-page="demo">Иллюстрации</a></nav>
   <div class="tools">
     <span class="seg" role="group" aria-label="Тема оформления"><button type="button" data-theme="auto" title="Как в системе">Авто</button><button type="button" data-theme="light" title="Светлая тема">Светлая</button><button type="button" data-theme="dark" title="Тёмная тема">Тёмная</button></span>
@@ -444,7 +445,7 @@ footer p { margin: 4px 0; }
 <aside>
   <div class="card">
     <div class="card-head"><h2>Условия иллюстраций</h2><button type="button" class="help-toggle" data-card-help aria-pressed="false">Подсказки</button></div>
-    <p class="note">Материал, подложка, угол, задняя сторона и шум σ(λ) берутся со страницы «Анализ» (текущий спектр и «Априорные условия»); параметры задней стороны и эффектов прибора в разделах 4–5 — из её панелей, пока их не изменить здесь.</p>
+    <p class="note">Материал, подложка, угол, задняя сторона и шум σ(λ) берутся со страницы «Анализ» (текущий спектр и «Априорные условия»). Размеры дефектов — из окончательного фита «Анализа» (|δ|), а пока его нет — из полей «Дефекты» симулятора; параметры задней стороны и эффектов прибора в разделах 4–5 — из её панелей; и те и другие следуют за «Анализом», пока их не изменить здесь.</p>
     <label for="dmSource">Параметры плёнки</label>
     <select id="dmSource">
       <option value="ref">опорный фит текущего спектра</option>
@@ -453,10 +454,11 @@ footer p { margin: 4px 0; }
     </select>
     <h3>Размеры дефектов</h3>
     <div class="row3">
-      <div><label for="dmDelta">|δ|, %</label><input type="number" id="dmDelta" step="0.1" min="0.05" max="20" value="1.0"></div>
-      <div><label for="dmRough">EMA-слой, нм</label><input type="number" id="dmRough" step="0.1" min="0.05" max="12" value="2.0"></div>
-      <div><label for="dmK">k₄₀₀, ×10⁻³</label><input type="number" id="dmK" step="0.1" min="0.05" max="50" value="1.0"></div>
+      <div><label for="dmDelta">|δ|, %</label><input type="number" id="dmDelta" step="0.01" min="0.05" max="20" value="1"></div>
+      <div><label for="dmRough">EMA-слой, нм</label><input type="number" id="dmRough" step="0.01" min="0.05" max="12" value="2"></div>
+      <div><label for="dmK">k₄₀₀, ×10⁻³</label><input type="number" id="dmK" step="0.01" min="0.05" max="50" value="1"></div>
     </div>
+    <div class="src-line"><span id="dmSizesSrc" class="status"></span><button type="button" class="small" id="dmSizesReset" hidden title="Снова брать размеры со страницы «Анализ»: из окончательного фита, а без него — из полей «Дефекты» симулятора">Как на «Анализе»</button></div>
     <div class="checks" style="margin:8px 0 2px"><label><input type="checkbox" id="dmInstr"> добавить эффекты прибора из симулятора к отпечаткам</label></div>
     <div class="btns">
       <button class="primary" id="dmBuild">Построить все иллюстрации</button>
@@ -623,7 +625,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
 (function () {
   'use strict';
   const E = window.EllipCore;
-  const APP_VERSION = '2.0.0';
+  const APP_VERSION = '2.1.0';
   const $ = (id) => document.getElementById(id);
   const S = { data: null, example: null, cfg: null, prior: null, ref: null, train: null, probs: null, choice: null, fin: null, charts: {}, redraw: {} };
   const MINUS = '−';
@@ -1240,9 +1242,9 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     simCont: ['gradient', 'Как считать истинный спектр при градиенте: непрерывный профиль n(z) через уравнение Риккати для локальной функции отражения (Фурман–Тихонравов, 1.1.19–1.1.20; RK4, шаг 0.5 нм) или лестница из 40 однородных подслоёв, как в модели фита. Непрерывный вариант точнее и на 1–2 с дольше.'],
     simDrD: ['drift', 'Дрейф калибровки Δ, градусы: смещение плюс случайный наклон по диапазону в пределах ±этого значения.'],
     dmSource: ['source', 'Чьи параметры плёнки (толщина и дисперсия) лежат в основе иллюстраций: найденные опорным фитом текущего спектра (по умолчанию; при необходимости опорный фит выполняется автоматически), истина встроенного или симулированного образца, либо справочная дисперсия при номинальной толщине.'],
-    dmDelta: ['gradient', 'Величина градиента показателя в иллюстрациях, %: классы с градиентом строятся с δ = ±это значение.'],
-    dmRough: ['roughness', 'Толщина EMA-слоя шероховатости в иллюстрациях, нм.'],
-    dmK: ['absorption', 'Размер хвоста поглощения в иллюстрациях — k хвоста при 400 нм, ×10⁻³.'],
+    dmDelta: ['gradient', 'Величина градиента показателя в иллюстрациях, %: классы с градиентом строятся с δ = ±это значение. По умолчанию — модуль градиента, найденного окончательным фитом на странице «Анализ», а пока фита нет — модуль поля «Градиент δ» симулятора; нуль (дефекта нет) заменяется на 1 %, потому что нулевой дефект отпечатка не даёт. Изменённое здесь значение закрепляется, кнопка «Как на «Анализе»» возвращает подстановку. Допустимо 0.05–20 %.'],
+    dmRough: ['roughness', 'Толщина EMA-слоя шероховатости в иллюстрациях, нм. По умолчанию — слой, найденный окончательным фитом на странице «Анализ», а пока фита нет — поле «EMA-слой» симулятора; нуль заменяется на 2 нм. Допустимо 0.05–12 нм.'],
+    dmK: ['absorption', 'Размер хвоста поглощения в иллюстрациях — k хвоста при 400 нм, ×10⁻³. По умолчанию — k₄₀₀, найденное окончательным фитом на странице «Анализ», а пока фита нет — поле «k₄₀₀ хвоста» симулятора; нуль заменяется на 1.0. Допустимо 0.05–50.'],
     dmInstr: ['bandwidth', 'Если включено, к спектрам классов дефектов добавляются эффекты прибора с параметрами из панели «Симулятор измерения» (полоса, ошибка угла, сдвиг шкалы λ, дрейф, шум): отпечатки становятся «как в измерении». Выключено — отпечатки чистые, только от дефектов.'],
   };
   function decorateFields() {
@@ -1291,7 +1293,8 @@ const EXAMPLES = /*__EXAMPLES__*/[];
 
   // ================================================================ страница «Иллюстрации»
   // DM.cfg / DM.prior — условия иллюстраций: снимок полей страницы «Анализ» на момент построения, отдельный от DM.cfg / DM.prior шагов 1–4
-  const DM = { res: {}, base: null, ref: null, cfg: null, prior: null, building: false, stale: true, staleAgain: null, view: 'plane', scale: 'common', anchUnits: 'deg', backUnits: 'deg' };
+  // DM.sz — размеры дефектов, с которыми построены иллюстрации (снимок полей на момент построения: подписи и легенды — по нему, а не по полям)
+  const DM = { res: {}, base: null, ref: null, cfg: null, prior: null, sz: null, building: false, stale: true, staleAgain: null, view: 'plane', scale: 'common', anchUnits: 'deg', backUnits: 'deg' };
   const dmCfgRef = () => Object.assign({}, DM.cfg, { band: null });          // как dmCfgRef(), но от условий иллюстраций
   const dmMatOf = (P) => Object.assign({}, DM.cfg.mat, { A: P.A, Auv: P.Auv, Eg: P.Eg, Ak: P.Ak || 0 });
   /** Варианты дефектов для иллюстраций: фиксированный порядок и фиксированные цвета (цвет следует за сущностью). */
@@ -1330,9 +1333,53 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   const withTail = (m, k400) => Object.assign({}, m, { Ak: k400 > 0 ? E.tailAk(m, k400) : 0 });
   /** Линия Δ(λ) с разрывами там, где Δ перескакивает через 0/360°. */
   const delPts = (lam, del) => Array.from(lam, (l, i) => ({ x: l, y: (i > 0 && Math.abs(del[i] - del[i - 1]) > 180) ? null : del[i] }));
-  const dmSizes = () => ({ delta: Math.min(0.2, Math.max(5e-4, Math.abs(+$('dmDelta').value || 1) / 100)), rough: Math.min(12, Math.max(0.05, +$('dmRough').value || 2)), k400: Math.min(E.K400_MAX, Math.max(5e-5, (+$('dmK').value || 1) / 1000)) });
-  const sizeLabel = (dv, sz) => dv.g ? `δ = ${dv.g > 0 ? '+' : MINUS}${fmt(100 * sz.delta, 1)} %` : dv.r ? `слой ${fmt(sz.rough, 1)} нм` : dv.a ? `k₄₀₀ = ${fmtK(sz.k400, 1)}` : '';
+  // Размеры дефектов иллюстраций (|δ|, EMA-слой, k₄₀₀) — поля панели «Условия иллюстраций». Значение поля используется как есть:
+  // нуль, пустое поле и выход за границы поля не подменяются умолчанием, а останавливают построение с сообщением и подсветкой поля
+  // (раньше «|| 1» молча превращал введённый нуль k₄₀₀ в 1.0·10⁻³, и на диаграммах оставалась единица).
+  const SIZE_FIELDS = { dmDelta: { name: '|δ|', unit: '%', defect: 'градиент' }, dmRough: { name: 'EMA-слой', unit: 'нм', defect: 'слой шероховатости' }, dmK: { name: 'k₄₀₀', unit: '×10⁻³', defect: 'хвост поглощения' } };
+  /** Недопустимые размеры: список сообщений (пустой — всё в порядке); подсветка полей обновляется. */
+  function sizeProblems() {
+    const out = [];
+    for (const [id, c] of Object.entries(SIZE_FIELDS)) {
+      const el = $(id), raw = String(el.value).trim(), v = +raw, lo = +el.min, hi = +el.max, bad = raw === '' || !isFinite(v) || v < lo || v > hi;
+      el.classList.toggle('invalid', bad);
+      if (bad) out.push(`${c.name} = ${raw === '' ? 'пусто' : raw.replace('-', MINUS)}${raw !== '' && v === 0 ? ' (нулевой дефект отпечатка не даёт)' : ''} — допустимо ${lo}–${hi} ${c.unit}`);
+    }
+    return out;
+  }
+  const dmSizes = () => ({ delta: Math.abs(+$('dmDelta').value) / 100, rough: +$('dmRough').value, k400: +$('dmK').value / 1000 });
+  /** Размер в подписях: до двух знаков, без лишнего нуля (1 → «1.0», 0.78 → «0.78», 2.2 → «2.2»). */
+  const fmtS = (v) => numStr(v, 2).replace(/(\.\d)0$/, '$1');
+  const fmtKs = (k) => fmtS(1000 * k) + '·10⁻³';
+  const sizeLabel = (dv, sz) => dv.g ? `δ = ${dv.g > 0 ? '+' : MINUS}${fmtS(100 * sz.delta)} %` : dv.r ? `слой ${fmtS(sz.rough)} нм` : dv.a ? `k₄₀₀ = ${fmtKs(sz.k400)}` : '';
   const legendLabel = (dv, sz) => dv.short + (sizeLabel(dv, sz) ? ` (${sizeLabel(dv, sz)})` : '');
+  // Размеры по умолчанию — со страницы «Анализ»: из окончательного фита текущего спектра (|δ|, слой, k₄₀₀ найденных дефектов),
+  // а пока его нет — из полей «Дефекты» панели «Симулятор измерения» (градиент — по модулю). Нуль (дефект не включён в фит или
+  // убран вето; нуль в симуляторе) заменяется встроенным умолчанием 1 % / 2 нм / 1.0·10⁻³: нулевой дефект отпечатка не даёт.
+  // Поле, изменённое здесь, закрепляется за страницей до кнопки «Как на «Анализе»» — как поля разделов «Задняя сторона» и «Прибор».
+  const SIZE_SRC = { dmDelta: { sim: 'simDelta', def: 1, fin: (P, f) => (f.grad ? 100 * Math.abs(P.delta) : 0) }, dmRough: { sim: 'simRough', def: 2, fin: (P, f) => (f.rough ? P.dRough : 0) }, dmK: { sim: 'simK', def: 1, fin: (P, f) => (f.abs ? 1000 * P.k400 : 0) } };
+  const finSizes = () => ((S.fin && S.finFlags) ? { P: S.fin.P, flags: S.finFlags } : null);
+  /** Размер для поля id со страницы «Анализ»: {v, zero} — значение в границах поля (два знака) или умолчание, если там нуль. */
+  function analysisSize(id) {
+    const c = SIZE_SRC[id], el = $(id), fin = finSizes(); const v = fin ? c.fin(fin.P, fin.flags) : Math.abs(+$(c.sim).value);
+    if (!(v > 0) || !isFinite(v)) return { v: c.def, zero: true };
+    return { v: Math.min(+el.max, Math.max(+el.min, +v.toFixed(2))), zero: false };
+  }
+  function sizesSrcInfo() {
+    const ids = Object.keys(SIZE_SRC), own = ids.filter(id => $(id).dataset.user === '1'), auto = ids.filter(id => $(id).dataset.user !== '1'), nm = (id) => SIZE_FIELDS[id].name;
+    const fin = finSizes(), from = fin ? 'из окончательного фита на странице «Анализ»' : 'из полей «Дефекты» симулятора на странице «Анализ» (окончательного фита нет)';
+    const zero = auto.filter(id => analysisSize(id).zero);
+    let t = own.length ? `заданы здесь: ${own.map(nm).join(', ')}` + (auto.length ? `; ${from}: ${auto.map(nm).join(', ')}` : '') : `размеры — ${from}`;
+    if (zero.length) t += `; ${zero.map(id => `${SIZE_FIELDS[id].defect} ${fin ? 'не включён в фит' : 'в симуляторе 0'} → ${nm(id)} ${fmtS(SIZE_SRC[id].def)} по умолчанию`).join(', ')}`;
+    $('dmSizesSrc').textContent = t; $('dmSizesReset').hidden = !own.length;
+  }
+  /** Заполняет со страницы «Анализ» размеры, которые не меняли здесь; true — если хоть одно поле изменилось. */
+  function sizesFromAnalysis() {
+    let changed = false;
+    for (const id of Object.keys(SIZE_SRC)) { if ($(id).dataset.user === '1') continue; const v = String(analysisSize(id).v); if ($(id).value !== v) { $(id).value = v; changed = true; } }
+    sizesSrcInfo(); sizeProblems();                                            // sizeProblems — снять подсветку с полей, ставших допустимыми
+    return changed;
+  }
   const tipLam = { callbacks: { title: (items) => (items.length && items[0].raw && items[0].raw.lam !== undefined) ? `λ = ${fmtVal(items[0].raw.lam)} нм` : '', label: (it) => `${it.dataset.label}: Ψ ${fmtVal(it.raw.x)} σ, Δ ${fmtVal(it.raw.y)} σ` } };
 
   /** Опорный фит для иллюстраций: фит страницы «Анализ», если он есть и «Априорные условия» после него не менялись; если его нет —
@@ -1375,7 +1422,7 @@ const EXAMPLES = /*__EXAMPLES__*/[];
 
   // ---------------------------------------------------------------- 1. отпечатки
   function dmFingerOne(base, i) {
-    const c = E.CLASSES[i], sz = dmSizes();
+    const c = E.CLASSES[i], sz = DM.sz;
     const dd = dmSynth(base, c.g * sz.delta, c.r ? sz.rough : 0, c.a ? sz.k400 : 0, $('dmInstr').checked);
     const fit = E.referenceFit(dd, dmCfgRef(), DM.prior);
     const x = E.featureVector(dd, DM.cfg, fit.resid);
@@ -1389,10 +1436,10 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   }
   function renderFinger() {
     const R = DM.res.finger; if (!R || !R.length) return;
-    const lam = DM.base.lam, n = lam.length, sz = dmSizes(), rng = fingerRange();
+    const lam = DM.base.lam, n = lam.length, sz = DM.sz, rng = fingerRange();
     const tr = (r) => Array.from(lam, (l, i) => ({ x: r[i], y: r[n + i], lam: l }));
     $('fingerOverlaySub').textContent = `плёнка: ${DM.base.label}, d = ${fmt(DM.base.d, 1)} нм; ${$('dmInstr').checked ? 'с эффектами прибора' : 'без эффектов прибора'}`;
-    $('fingerGridSub').textContent = `δ = ±${fmt(100 * sz.delta, 1)} %, слой ${fmt(sz.rough, 1)} нм, k₄₀₀ = ${fmtK(sz.k400, 1)}`;
+    $('fingerGridSub').textContent = `δ = ±${fmtS(100 * sz.delta)} %, слой ${fmtS(sz.rough)} нм, k₄₀₀ = ${fmtKs(sz.k400)}`;
     $('rampL0').textContent = `${fmt(lam[0], 0)} нм`; $('rampL1').textContent = `${fmt(lam[n - 1], 0)} нм`; document.querySelector('#fingerRamp .ramp-bar').style.background = rampCss();
     makeChart('cFingerOverlay', () => {
       const o = baseOpts('Ψ-остаток, σ', 'Δ-остаток, σ'); o.interaction = { mode: 'nearest', intersect: false }; o.plugins.tooltip = Object.assign(o.plugins.tooltip, tipLam);
@@ -1421,14 +1468,14 @@ const EXAMPLES = /*__EXAMPLES__*/[];
     }));
     $('fingerRamp').style.display = DM.view === 'plane' ? '' : 'none';
     const R1 = R[1], Ra = R[6], Rr = R[3];
-    $('dmFingerInfo').innerHTML = T(`Плёнка: <b>${DM.base.label}</b>, d = ${fmt(DM.base.d, 2)} нм, ${DM.cfg.mat.name}, подложка — ${subShort(DM.cfg.subKey)}, угол ${fmt(DM.cfg.phi, 2)}°${DM.cfg.back ? `, задняя сторона (доля ${fmt(DM.cfg.back.f, 2)})` : ''}. Шум — σ(λ) текущего измерения. Каналы якорей однородного фита: у градиента +${fmt(100 * sz.delta, 1)} % — Ψ в HW-якорях ${fmt(R1.ch.psiHW, 1)} σ; у шероховатости ${fmt(sz.rough, 1)} нм — |Δ| в HW ${fmt(Rr.ch.delHW, 1)} σ; у поглощения k₄₀₀ = ${fmtK(sz.k400, 1)} — перепад Ψ синие − красные якоря ${fmt(Ra.ch.psiHWtrend, 1)} σ.${DM.ref ? ` Измеренный спектр: RMS Ψ/Δ ${fmt(chan(DM.ref.feat, 'rmsPsi'), 1)}/${fmt(chan(DM.ref.feat, 'rmsDel'), 1)} σ, похож на: ${looksLike(chansOf(DM.ref.feat))}.` : ''}`);
+    $('dmFingerInfo').innerHTML = T(`Плёнка: <b>${DM.base.label}</b>, d = ${fmt(DM.base.d, 2)} нм, ${DM.cfg.mat.name}, подложка — ${subShort(DM.cfg.subKey)}, угол ${fmt(DM.cfg.phi, 2)}°${DM.cfg.back ? `, задняя сторона (доля ${fmt(DM.cfg.back.f, 2)})` : ''}. Шум — σ(λ) текущего измерения. Каналы якорей однородного фита: у градиента +${fmtS(100 * sz.delta)} % — Ψ в HW-якорях ${fmt(R1.ch.psiHW, 1)} σ; у шероховатости ${fmtS(sz.rough)} нм — |Δ| в HW ${fmt(Rr.ch.delHW, 1)} σ; у поглощения k₄₀₀ = ${fmtKs(sz.k400)} — перепад Ψ синие − красные якоря ${fmt(Ra.ch.psiHWtrend, 1)} σ.${DM.ref ? ` Измеренный спектр: RMS Ψ/Δ ${fmt(chan(DM.ref.feat, 'rmsPsi'), 1)}/${fmt(chan(DM.ref.feat, 'rmsDel'), 1)} σ, похож на: ${looksLike(chansOf(DM.ref.feat))}.` : ''}`);
   }
   document.querySelectorAll('#fingerView button').forEach(b => b.addEventListener('click', () => { DM.view = b.dataset.v; document.querySelectorAll('#fingerView button').forEach(x => x.classList.toggle('on', x === b)); renderFinger(); }));
   document.querySelectorAll('#fingerScale button').forEach(b => b.addEventListener('click', () => { DM.scale = b.dataset.s; document.querySelectorAll('#fingerScale button').forEach(x => x.classList.toggle('on', x === b)); renderFinger(); }));
 
   // ---------------------------------------------------------------- 2. якоря
   function dmAnchors(base) {
-    const cfg = base.cfg, lamF = base.lamF, NsubF = E.substrateN(cfg.subKey, lamF), sz = dmSizes();
+    const cfg = base.cfg, lamF = base.lamF, NsubF = E.substrateN(cfg.subKey, lamF), sz = DM.sz;
     const sub = E.modelPsiDelta(lamF, NsubF, cfg.phi, 0, base.mat, 0, 0, 1, cfg.back, null);
     const variants = DEFS.map(dv => { const r = E.modelPsiDelta(lamF, NsubF, cfg.phi, base.d, withTail(base.mat, dv.a ? sz.k400 : 0), dv.g * sz.delta, dv.r ? sz.rough : 0, 40, cfg.back, null); return { def: dv, psi: Array.from(r.psi), del: Array.from(r.del) }; });
     const hom = variants[0];
@@ -1691,7 +1738,10 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   function dmBuildAll() {
     if (!S.data) { $('dmStatus').textContent = 'Сначала выберите спектр на странице «Анализ».'; return; }
     if (DM.building) return;
-    DM.building = true; $('dmBuild').disabled = true; DM.res = {}; DM.ref = null;
+    sizesFromAnalysis();                                                      // незакреплённые размеры — со страницы «Анализ» (окончательный фит, иначе симулятор)
+    const badSizes = sizeProblems();
+    if (badSizes.length) { DM.stale = true; $('dmStatus').textContent = `Размеры дефектов вне допустимого: ${badSizes.join('; ')}. Исправьте поле и нажмите «Построить все иллюстрации».`; return; }
+    DM.building = true; $('dmBuild').disabled = true; DM.res = {}; DM.ref = null; DM.sz = dmSizes();
     try { DM.base = dmBase(); } catch (e) { DM.building = false; $('dmBuild').disabled = false; $('dmStatus').textContent = 'Ошибка: ' + e.message; return; }
     DM.staleAgain = null;                                                     // опорный фит внутри dmBase (шаг 1) сам помечает иллюстрации — это не «изменение во время построения»
     backFromAnalysis(); backSrcInfo(); instrFromSim();
@@ -1716,15 +1766,24 @@ const EXAMPLES = /*__EXAMPLES__*/[];
   // «Априорные условия» (материал, дисперсия, подложка, угол, номинал и разброс толщины), параметры прибора в симуляторе
   // (раздел «Прибор» и отпечатки «с эффектами прибора») и выполненные фиты (опорный — основа иллюстраций, окончательный — раздел «Дисперсия»).
   const markStale = (msg) => { DM.stale = true; if (DM.building) DM.staleAgain = msg; else if (Object.keys(DM.res).length) $('dmStatus').textContent = msg; };   // во время построения — запомнить: по его окончании иллюстрации снова устареют
-  S.onDataChange = () => markStale('Спектр или условия изменились — иллюстрации будут построены заново.');
+  // новый спектр или сброс шагов убирают окончательный фит, выполненный фит даёт новый: незакреплённые размеры дефектов следуют за ним (иначе — за симулятором)
+  S.onDataChange = () => { sizesFromAnalysis(); markStale('Спектр или условия изменились — иллюстрации будут построены заново.'); };
   S.onCfgChange = () => { S.cfgDirty = true; markStale('«Априорные условия» на странице «Анализ» изменились — иллюстрации будут построены заново (опорный фит для них пересчитается, результаты «Анализа» не трогаются).'); };
-  S.onFitChange = () => markStale('На странице «Анализ» выполнен фит — иллюстрации будут построены заново (раздел «Дисперсия» покажет найденную дисперсию).');
+  S.onFitChange = () => { const sizes = sizesFromAnalysis() && finSizes(); markStale(`На странице «Анализ» выполнен фит — иллюстрации будут построены заново (раздел «Дисперсия» покажет найденную дисперсию${sizes ? ', размеры дефектов взяты из окончательного фита' : ''}).`); };
   // поля, от которых зависит опорный фит и модель иллюстраций (полоса прибора bw и σ по умолчанию в них не входят; доля и толщина задней стороны сбрасывают шаги сами — resetSteps)
   ['matSel', 'subSel', 'phi', 'dNom', 'dRange', 'mA', 'mE0', 'mC', 'mEg', 'mAuv', 'mEuv'].forEach(id => $(id).addEventListener('change', () => S.onCfgChange()));
-  ['dmSource', 'dmDelta', 'dmRough', 'dmK', 'dmInstr'].forEach(id => $(id).addEventListener('change', () => { DM.stale = true; $('dmStatus').textContent = 'Условия иллюстраций изменились — нажмите «Построить все иллюстрации».'; }));
+  ['dmSource', 'dmInstr'].forEach(id => $(id).addEventListener('change', () => { DM.stale = true; $('dmStatus').textContent = 'Условия иллюстраций изменились — нажмите «Построить все иллюстрации».'; }));
+  // размер, изменённый здесь, закрепляется за страницей; недопустимое значение (нуль, пусто, вне границ) сразу называется в строке состояния
+  Object.keys(SIZE_SRC).forEach(id => $(id).addEventListener('change', () => {
+    $(id).dataset.user = '1'; sizesSrcInfo(); DM.stale = true; const bad = sizeProblems();
+    $('dmStatus').textContent = bad.length ? `Размеры дефектов вне допустимого: ${bad.join('; ')}.` : 'Условия иллюстраций изменились — нажмите «Построить все иллюстрации».';
+  }));
+  // смена полей «Дефекты» в симуляторе переносится в незакреплённые поля, пока размеры не заданы окончательным фитом
+  Object.values(SIZE_SRC).forEach(c => $(c.sim).addEventListener('input', () => { if (sizesFromAnalysis()) markStale('Размеры дефектов в симуляторе изменились — иллюстрации будут построены заново.'); }));
+  $('dmSizesReset').addEventListener('click', () => { Object.keys(SIZE_SRC).forEach(id => { delete $(id).dataset.user; }); if (sizesFromAnalysis()) { DM.stale = true; if (DM.base && !DM.building) dmBuildAll(); else $('dmStatus').textContent = 'Размеры дефектов снова со страницы «Анализ» — нажмите «Построить все иллюстрации».'; } });
   // параметры прибора в симуляторе: незакреплённые поля раздела «Прибор» следуют за ними; отпечатки «с эффектами прибора» тоже от них зависят
   Object.values(INSTR_MAP).forEach(([sim]) => $(sim).addEventListener('input', () => { if (instrFromSim() || $('dmInstr').checked) markStale('Параметры прибора в симуляторе изменились — иллюстрации будут построены заново.'); }));
-  instrFromSim(); backFromAnalysis(); backSrcInfo();
+  instrFromSim(); backFromAnalysis(); backSrcInfo(); sizesFromAnalysis();
   pageHooks.demo.push(() => { if (DM.stale && !DM.building && S.data) dmBuildAll(); });
   // режим показа: флажок в боковой панели и кнопка в подменю (панель в этом режиме скрыта)
   function setPresent(on) { $('dmPresent').checked = on; document.body.classList.toggle('present', on); $('dmPresentBtn').classList.toggle('on', on); $('dmPresentBtn').setAttribute('aria-pressed', String(on)); fontScale = on ? 1.15 : 1; setTimeout(() => redrawCharts(), 50); }
